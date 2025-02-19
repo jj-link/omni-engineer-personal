@@ -9,14 +9,14 @@
 
 ## Phase 1: Core Infrastructure Setup
 
-### 1.1 Test Infrastructure (Priority: High)
-- [ ] Set up pytest framework
-- [ ] Create test fixtures for:
+### 1.1 Test Infrastructure (Priority: High) 
+- [x] Set up pytest framework
+- [x] Create test fixtures for:
   - Mock CBORG API responses
   - Mock Ollama API responses
   - Environment variable management
   - Command line argument parsing
-- [ ] Implement test utilities for:
+- [x] Implement test utilities for:
   - Model response simulation
   - Stream interruption testing
   - Parameter validation
@@ -32,11 +32,11 @@ def test_missing_cborg_api_key():
     """Test appropriate error when CBORG_API_KEY is missing"""
 ```
 
-### 1.2 API Configuration (Priority: High)
-- [ ] Create `APIConfig` class
-- [ ] Implement provider configuration
-- [ ] Add environment variable handling
-- [ ] Write tests for:
+### 1.2 API Configuration (Priority: High) 
+- [x] Create `APIConfig` class
+- [x] Implement provider configuration
+- [x] Add environment variable handling
+- [x] Write tests for:
   - Valid configuration loading
   - Invalid configuration handling
   - Default values
@@ -48,10 +48,10 @@ def test_api_config_validation():
     """Test validation of API configurations"""
 ```
 
-### 1.3 Client Factory (Priority: High)
-- [ ] Implement `ClientFactory` class
-- [ ] Add client creation logic for each provider
-- [ ] Write tests for:
+### 1.3 Client Factory (Priority: High) 
+- [x] Implement `ClientFactory` class
+- [x] Add client creation logic for each provider
+- [x] Write tests for:
   - CBORG client creation
   - Ollama client creation
   - Error handling
