@@ -475,12 +475,23 @@ def generate_diff(original, new, path):
 def read_file(path):
     global file_contents
     try:
+        if not os.path.exists(path):
+            return {
+                "content": f"Error: File '{path}' not found",
+                "is_error": True
+            }
         with open(path, 'r') as f:
             content = f.read()
         file_contents[path] = content
-        return f"File '{path}' has been read and stored in the system prompt."
+        return {
+            "content": f"File '{path}' has been read and stored in the system prompt.",
+            "is_error": False
+        }
     except Exception as e:
-        return f"Error reading file: {str(e)}"
+        return {
+            "content": f"Error reading file: {str(e)}",
+            "is_error": True
+        }
 
 def read_multiple_files(paths):
     global file_contents
@@ -665,15 +676,14 @@ async def execute_tool(tool_call: Dict[str, Any]) -> Dict[str, Any]:
         else:
             tool_input = tool_arguments
 
-        result = None
-        is_error = False
-
         if tool_name == "create_folder":
             if "path" not in tool_input:
                 raise KeyError("Missing 'path' parameter for create_folder")
             result = create_folder(tool_input["path"])
+            return {"content": result, "is_error": False}
         elif tool_name == "create_file":
             result = create_file(tool_input["path"], tool_input.get("content", ""))
+            return {"content": result, "is_error": False}
         elif tool_name == "edit_and_apply":
             result = await edit_and_apply(
                 tool_input["path"],
@@ -681,22 +691,23 @@ async def execute_tool(tool_call: Dict[str, Any]) -> Dict[str, Any]:
                 tool_input["project_context"],
                 is_automode=automode
             )
+            return {"content": result, "is_error": False}
         elif tool_name == "read_file":
-            result = read_file(tool_input["path"])
+            return read_file(tool_input["path"])
         elif tool_name == "read_multiple_files":
             result = read_multiple_files(tool_input["paths"])
+            return {"content": result, "is_error": False}
         elif tool_name == "list_files":
             result = list_files(tool_input.get("path", "."))
+            return {"content": result, "is_error": False}
         elif tool_name == "tavily_search":
             result = tavily_search(tool_input["query"])
+            return {"content": result, "is_error": False}
         else:
-            is_error = True
-            result = f"Unknown tool: {tool_name}"
-
-        return {
-            "content": result,
-            "is_error": is_error
-        }
+            return {
+                "content": f"Unknown tool: {tool_name}",
+                "is_error": True
+            }
     except KeyError as e:
         error_message = f"Missing required parameter {str(e)} for tool {tool_name}"
         logging.error(error_message)

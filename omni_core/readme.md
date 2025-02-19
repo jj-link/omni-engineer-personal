@@ -122,7 +122,7 @@ The code_execution_env virtual environment will be used for all code execution t
 Run the main script to start the Claude Engineer interface:
 
 ```
-python main.py
+python -m omni_core
 ```
 
 Once started, you can interact with Claude Engineer by typing your queries or commands. Some example interactions:

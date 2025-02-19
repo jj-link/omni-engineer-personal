@@ -1,209 +1,180 @@
 # Detailed Refactor Plan: Multi-Model Support Implementation
 
 ## General Guidelines
-- Follow Test-Driven Development (TDD) approach: Write tests first, then implement
-- Each feature must have both unit tests and integration tests
-- Commit after each completed item that passes all tests
-- Use meaningful commit messages following conventional commits format
-- Create feature branches for major changes
+- Follow Test-Driven Development (TDD) approach
+- Preserve existing functionality while refactoring
+- Add tests before making changes
+- Use meaningful commit messages
+- Make incremental, reversible changes
 
-## Phase 1: Core Infrastructure Setup
+## Phase 1: Test Infrastructure
 
-### 1.1 Test Infrastructure (Priority: High) 
+### 1.1 Test Current Functionality
 - [x] Set up pytest framework
 - [x] Create test fixtures for:
-  - Mock CBORG API responses
-  - Mock Ollama API responses
-  - Environment variable management
-  - Command line argument parsing
-- [x] Implement test utilities for:
-  - Model response simulation
-  - Stream interruption testing
-  - Parameter validation
+  - Ollama API responses
+  - File system operations
+  - Console output
+  - Code editing
 ```python
-# Example test structure
-def test_cborg_client_creation():
-    """Test CBORG client initialization with valid API key"""
+def test_ollama_generation():
+    """Test existing Ollama generation"""
 
-def test_ollama_client_creation():
-    """Test Ollama client initialization with custom URL"""
+def test_code_editing():
+    """Test code editing functionality"""
 
-def test_missing_cborg_api_key():
-    """Test appropriate error when CBORG_API_KEY is missing"""
+def test_console_output():
+    """Test rich console output"""
 ```
 
-### 1.2 API Configuration (Priority: High) 
-- [x] Create `APIConfig` class
-- [x] Implement provider configuration
-- [x] Add environment variable handling
-- [x] Write tests for:
-  - Valid configuration loading
-  - Invalid configuration handling
-  - Default values
+### 1.2 Document Behavior
+- [x] Map out existing functions
+- [x] Document current workflows
+- [x] Create behavior specifications
 ```python
-def test_api_config_loading():
-    """Test loading of API configurations"""
-
-def test_api_config_validation():
-    """Test validation of API configurations"""
+# Example behavior specification
+def test_edit_workflow():
+    """
+    Given: A file with content
+    When: User requests an edit
+    Then: System should:
+    1. Generate edit instructions
+    2. Apply changes
+    3. Show diff
+    4. Save changes
+    """
 ```
 
-### 1.3 Client Factory (Priority: High) 
-- [x] Implement `ClientFactory` class
-- [x] Add client creation logic for each provider
-- [x] Write tests for:
-  - CBORG client creation
-  - Ollama client creation
-  - Error handling
-```python
-def test_client_factory_cborg():
-    """Test creation of CBORG client"""
+## Phase 2: Module Extraction
 
-def test_client_factory_ollama():
-    """Test creation of Ollama client"""
+### 2.1 Core Components
+- [ ] Extract from engine.py:
+  - Model client interface
+  - Console manager
+  - File operations
+  - Project context
+```python
+# Example module structure
+class ModelClient:
+    """Base class for model interactions"""
+
+class ConsoleManager:
+    """Handle rich console output"""
+
+class FileOps:
+    """File system operations"""
 ```
 
-## Phase 2: Model Integration
-
-### 2.1 CBORG Integration (Priority: High)
-- [ ] Implement CBORG client wrapper
-- [ ] Add model selection logic
-- [ ] Write tests for:
-  - API calls
-  - Model selection
-  - Error handling
+### 2.2 Supporting Features
+- [ ] Extract from engine.py:
+  - Conversation management
+  - Code editing
+  - Diff generation
+  - Command parsing
 ```python
-def test_cborg_api_call():
-    """Test basic CBORG API functionality"""
+class ConversationManager:
+    """Manage chat history"""
 
-def test_cborg_model_selection():
-    """Test CBORG model selection"""
+class CodeEditor:
+    """Handle code modifications"""
 ```
 
-### 2.2 Ollama Integration (Priority: High)
-- [ ] Implement Ollama client wrapper
-- [ ] Add local model detection
-- [ ] Write tests for:
-  - Local API calls
-  - Model availability
-  - Custom URL handling
-```python
-def test_ollama_api_call():
-    """Test basic Ollama API functionality"""
+## Phase 3: CBORG Integration
 
-def test_ollama_model_detection():
-    """Test Ollama model availability detection"""
+### 3.1 Provider Interface
+- [ ] Create common interface
+- [ ] Implement CBORG client
+- [ ] Add provider selection
+```python
+class ProviderInterface:
+    """Common interface for all providers"""
+
+class CBORGClient(ProviderInterface):
+    """CBORG-specific implementation"""
 ```
 
-## Phase 3: Parameter Controls
+### 3.2 Configuration
+- [ ] Add provider settings
+- [ ] Implement environment handling
+- [ ] Create validation logic
+```python
+class ProviderConfig:
+    """Handle provider configuration"""
+```
 
-### 3.1 Parameter Management (Priority: Medium)
-- [ ] Implement `ModelParameters` class
+## Phase 4: Enhancement
+
+### 4.1 Error Handling
+- [ ] Improve error messages
+- [ ] Add recovery strategies
+- [ ] Create logging system
+```python
+class ErrorHandler:
+    """Centralized error handling"""
+```
+
+### 4.2 Parameter Management
 - [ ] Add parameter validation
-- [ ] Write tests for:
-  - Parameter validation
-  - Default values
-  - Provider-specific formatting
+- [ ] Implement provider-specific formatting
+- [ ] Create parameter presets
 ```python
-def test_parameter_validation():
-    """Test parameter validation logic"""
-
-def test_parameter_formatting():
-    """Test parameter formatting for different providers"""
+class ParameterManager:
+    """Handle model parameters"""
 ```
 
-### 3.2 Command Line Interface (Priority: Medium)
-- [ ] Implement argument parser
-- [ ] Add parameter handling
-- [ ] Write tests for:
-  - Argument parsing
-  - Parameter combination validation
-  - Help text accuracy
-```python
-def test_cli_argument_parsing():
-    """Test command line argument parsing"""
+## Phase 5: Testing and Documentation
 
-def test_cli_parameter_validation():
-    """Test parameter validation from CLI"""
+### 5.1 Test Coverage
+- [ ] Integration tests
+- [ ] Performance tests
+- [ ] Edge cases
+- [ ] Provider-specific tests
+
+### 5.2 Documentation
+- [ ] Update README
+- [ ] Create API documentation
+- [ ] Add usage examples
+- [ ] Document architecture
+
+## Module Structure
+```
+omni_core/
+├── __init__.py
+├── __main__.py
+├── engine.py
+├── client/
+│   ├── __init__.py
+│   ├── base.py
+│   ├── ollama.py
+│   └── cborg.py
+├── console/
+│   ├── __init__.py
+│   └── manager.py
+├── editor/
+│   ├── __init__.py
+│   └── code_editor.py
+└── utils/
+    ├── __init__.py
+    ├── files.py
+    └── config.py
 ```
 
-## Phase 4: Streaming and Controls
+## Success Metrics
+- All tests passing
+- No regression in functionality
+- >90% test coverage
+- Clear error messages
+- Comprehensive documentation
 
-### 4.1 Streaming Implementation (Priority: High)
-- [ ] Implement streaming response handler
-- [ ] Add interrupt handling
-- [ ] Write tests for:
-  - Stream processing
-  - Chunked responses
-  - Error handling
-```python
-def test_streaming_response():
-    """Test streaming response handling"""
+## Migration Plan
+1. Create tests for current functionality
+2. Extract modules one at a time
+3. Add CBORG support
+4. Enhance and optimize
+5. Document and test thoroughly
 
-def test_stream_interruption():
-    """Test stream interruption with /stop"""
-```
-
-### 4.2 Error Handling (Priority: Medium)
-- [ ] Implement comprehensive error handling
-- [ ] Add user-friendly error messages
-- [ ] Write tests for:
-  - API errors
-  - Network errors
-  - Configuration errors
-```python
-def test_api_error_handling():
-    """Test API error handling"""
-
-def test_network_error_handling():
-    """Test network error handling"""
-```
-
-## Phase 5: Integration Testing
-
-### 5.1 End-to-End Tests (Priority: High)
-- [ ] Create integration test suite
-- [ ] Add real-world usage scenarios
-- [ ] Write tests for:
-  - Complete workflows
-  - Model switching
-  - Parameter combinations
-```python
-def test_complete_workflow():
-    """Test complete user workflow"""
-
-def test_model_switching():
-    """Test switching between models"""
-```
-
-### 5.2 Performance Testing (Priority: Medium)
-- [ ] Implement performance benchmarks
-- [ ] Add response time tracking
-- [ ] Write tests for:
-  - Response times
-  - Memory usage
-  - Stream handling efficiency
-```python
-def test_response_performance():
-    """Test response time performance"""
-
-def test_memory_usage():
-    """Test memory usage during operations"""
-```
-
-## Commit Strategy
-```bash
-# Example commit messages
-feat(api): implement CBORG client wrapper
-test(api): add CBORG client tests
-fix(params): correct temperature validation
-docs(readme): update usage examples
-```
-
-## Test Coverage Requirements
-- Minimum 85% code coverage
-- 100% coverage for critical paths:
-  - API client creation
-  - Model selection
-  - Parameter validation
-  - Error handling
+## Existing Files Assessment
+- omni_core/config.py: Can be adapted for provider configuration
+- omni_core/client.py: Can be basis for provider interface
+- omni_core/cli.py: Need to merge with existing CLI
+- Other files: Need to be evaluated against existing functionality
