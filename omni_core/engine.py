@@ -24,12 +24,22 @@ PROVIDER_CONFIG = {
     'cborg': {
         'base_url': 'https://api.cborg.lbl.gov',
         'default_model': 'lbl/cborg-coder:latest',
-        'requires_key': True
+        'requires_key': True,
+        'parameters': {
+            'temperature': 0.7,
+            'top_p': 0.9,
+            'seed': None
+        }
     },
     'ollama': {
         'base_url': 'http://localhost:11434',
         'default_model': 'codellama',
-        'requires_key': False
+        'requires_key': False,
+        'parameters': {
+            'temperature': 0.7,
+            'top_p': 0.9,
+            'seed': None
+        }
     }
 }
 
@@ -822,18 +832,34 @@ async def chat_with_ollama(user_input, image_path=None, current_iteration=None, 
     messages = filtered_conversation_history + current_conversation
 
     try:
-        # MAINMODEL call, which maintains context
-        # Prepend the system message to the messages list
-        system_message = {"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}
-        messages_with_system = [system_message] + messages
+        # Update system prompt if needed
+        system_prompt = update_system_prompt(current_iteration, max_iterations)
+
+        # Get provider config
+        provider = PROVIDER_CONFIG['ollama']
         
+        # Prepare messages
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        
+        # Add conversation history
+        messages.extend(conversation_history)
+        
+        # Add current message
+        messages.append({"role": "user", "content": user_input})
+
+        # Generate response
         response = await client.chat(
-            model=MAINMODEL,
-            messages=messages_with_system,
-            tools=tools,
-            stream=False
+            model=provider['default_model'],
+            messages=messages,
+            options={
+                "temperature": provider['parameters']['temperature'],
+                "top_p": provider['parameters']['top_p'],
+                "seed": provider['parameters']['seed']
+            }
         )
-        
+
         # Check if the response is a dictionary
         if isinstance(response, dict):
             if 'error' in response:
@@ -917,9 +943,11 @@ async def chat_with_ollama(user_input, image_path=None, current_iteration=None, 
         messages = filtered_conversation_history + current_conversation
 
         try:
+            # Update system prompt if needed
+            system_prompt = update_system_prompt(current_iteration, max_iterations)
+
             # Prepend the system message to the messages list
-            system_message = {"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}
-            messages_with_system = [system_message] + messages
+            messages_with_system = [{"role": "system", "content": system_prompt}] + messages
             
             tool_response = await client.chat(
                 model=TOOLCHECKERMODEL,
@@ -978,6 +1006,15 @@ async def main():
     parser.add_argument('--api', choices=['cborg', 'ollama'], default='ollama',
                       help='AI provider to use (default: ollama)')
     parser.add_argument('--model', help='Model name to use (provider-specific)')
+    
+    # Add common parameter arguments
+    parser.add_argument('--temperature', type=float,
+                      help='Temperature for response generation (0.0-1.0)')
+    parser.add_argument('--top-p', type=float,
+                      help='Top-p sampling parameter (0.0-1.0)')
+    parser.add_argument('--seed', type=int,
+                      help='Random seed for reproducible responses')
+    
     args = parser.parse_args()
 
     # Validate provider configuration
@@ -992,10 +1029,7 @@ async def main():
 
     # Set model if specified
     if args.model:
-        if args.api == 'ollama':
-            provider_config['default_model'] = args.model
-        elif args.api == 'cborg':
-            provider_config['default_model'] = args.model
+        provider_config['default_model'] = args.model
 
     console.print(Panel(f"Welcome to Omni Engineer using {args.api.upper()} provider!", title="Welcome", style="bold green"))
     console.print("Type 'exit' to end the conversation.")
@@ -1003,6 +1037,22 @@ async def main():
     console.print("Type 'reset' to clear the conversation history.")
     console.print("Type 'save chat' to save the conversation to a Markdown file.")
     console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
+
+    # Update parameters if specified
+    if args.temperature is not None:
+        if 0.0 <= args.temperature <= 1.0:
+            PROVIDER_CONFIG[args.api]['parameters']['temperature'] = args.temperature
+        else:
+            console.print(Panel("Warning: Temperature must be between 0.0 and 1.0. Using default.", style="yellow"))
+
+    if args.top_p is not None:
+        if 0.0 <= args.top_p <= 1.0:
+            PROVIDER_CONFIG[args.api]['parameters']['top_p'] = args.top_p
+        else:
+            console.print(Panel("Warning: Top-p must be between 0.0 and 1.0. Using default.", style="yellow"))
+
+    if args.seed is not None:
+        PROVIDER_CONFIG[args.api]['parameters']['seed'] = args.seed
 
     while True:
         user_input = await get_user_input()
