@@ -17,6 +17,21 @@ import asyncio
 import aiohttp
 from prompt_toolkit import PromptSession
 from prompt_toolkit.styles import Style
+import argparse
+
+# Provider configuration
+PROVIDER_CONFIG = {
+    'cborg': {
+        'base_url': 'https://api.cborg.lbl.gov',
+        'default_model': 'lbl/cborg-coder:latest',
+        'requires_key': True
+    },
+    'ollama': {
+        'base_url': 'http://localhost:11434',
+        'default_model': 'codellama',
+        'requires_key': False
+    }
+}
 
 async def get_user_input(prompt="You: "):
     style = Style.from_dict({
@@ -24,13 +39,15 @@ async def get_user_input(prompt="You: "):
     })
     session = PromptSession(style=style)
     return await session.prompt_async(prompt, multiline=False)
+
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 import datetime
+
 # Load environment variables from .env file
 load_dotenv()
 
 # Initialize the Ollama client
-client = ollama.AsyncClient()
+client = ollama.AsyncClient(host=PROVIDER_CONFIG['ollama']['base_url'])
 
 # Initialize the Tavily client
 tavily_api_key = os.getenv("TAVILY_API_KEY")
@@ -39,8 +56,6 @@ if not tavily_api_key:
 tavily = TavilyClient(api_key=tavily_api_key)
 
 console = Console()
-
-
 
 # Set up the conversation memory (maintains context for MAINMODEL)
 conversation_history = []
@@ -959,6 +974,36 @@ async def main():
     console.print("Type 'save chat' to save the conversation to a Markdown file.")
     console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
 
+    parser = argparse.ArgumentParser(description='Omni Engineer - Multi-Model AI Assistant')
+    parser.add_argument('--api', choices=['cborg', 'ollama'], default='ollama',
+                      help='AI provider to use (default: ollama)')
+    parser.add_argument('--model', help='Model name to use (provider-specific)')
+    args = parser.parse_args()
+
+    # Validate provider configuration
+    if args.api not in PROVIDER_CONFIG:
+        console.print(Panel(f"Error: Unknown provider '{args.api}'", style="bold red"))
+        return
+
+    provider_config = PROVIDER_CONFIG[args.api]
+    if provider_config['requires_key'] and not os.getenv(f"{args.api.upper()}_API_KEY"):
+        console.print(Panel(f"Error: {args.api.upper()}_API_KEY not found in environment variables", style="bold red"))
+        return
+
+    # Set model if specified
+    if args.model:
+        if args.api == 'ollama':
+            provider_config['default_model'] = args.model
+        elif args.api == 'cborg':
+            provider_config['default_model'] = args.model
+
+    console.print(Panel(f"Welcome to Omni Engineer using {args.api.upper()} provider!", title="Welcome", style="bold green"))
+    console.print("Type 'exit' to end the conversation.")
+    console.print("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.")
+    console.print("Type 'reset' to clear the conversation history.")
+    console.print("Type 'save chat' to save the conversation to a Markdown file.")
+    console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
+
     while True:
         user_input = await get_user_input()
 
@@ -974,7 +1019,6 @@ async def main():
             filename = save_chat()
             console.print(Panel(f"Chat saved to {filename}", title="Chat Saved", style="bold green"))
             continue
-
 
         if user_input.lower().startswith('automode'):
             try:
@@ -992,7 +1036,10 @@ async def main():
                 iteration_count = 0
                 try:
                     while automode and iteration_count < max_iterations:
-                        response, exit_continuation = await chat_with_ollama(user_input, current_iteration=iteration_count+1, max_iterations=max_iterations)
+                        if args.api == 'ollama':
+                            response, exit_continuation = await chat_with_ollama(user_input, current_iteration=iteration_count+1, max_iterations=max_iterations)
+                        else:
+                            response, exit_continuation = await chat_with_cborg(user_input, current_iteration=iteration_count+1, max_iterations=max_iterations)
 
                         if exit_continuation or CONTINUATION_EXIT_PHRASE in response:
                             console.print(Panel("Automode completed.", title_align="left", title="Automode", style="green"))
@@ -1010,15 +1057,24 @@ async def main():
                     automode = False
                     if conversation_history and conversation_history[-1]["role"] == "user":
                         conversation_history.append({"role": "assistant", "content": "Automode interrupted. How can I assist you further?"})
-            except KeyboardInterrupt:
-                console.print(Panel("\nAutomode interrupted by user. Exiting automode.", title_align="left", title="Automode", style="bold red"))
+            except Exception as e:
+                console.print(Panel(f"Error in automode: {str(e)}", title_align="left", title="Error", style="bold red"))
                 automode = False
-                if conversation_history and conversation_history[-1]["role"] == "user":
-                    conversation_history.append({"role": "assistant", "content": "Automode interrupted. How can I assist you further?"})
+            continue
 
-            console.print(Panel("Exited automode. Returning to regular chat.", style="green"))
-        else:
-            response, _ = await chat_with_ollama(user_input)
+        try:
+            if args.api == 'ollama':
+                response, _ = await chat_with_ollama(user_input)
+            else:
+                response, _ = await chat_with_cborg(user_input)
+        except Exception as e:
+            console.print(Panel(f"Error: {str(e)}", title_align="left", title="Error", style="bold red"))
+
+async def chat_with_cborg(user_input, image_path=None, current_iteration=None, max_iterations=None):
+    """
+    Chat with CBORG API (stub for now - will be implemented in Phase 3)
+    """
+    raise NotImplementedError("CBORG support will be added in Phase 3")
 
 if __name__ == "__main__":
     asyncio.run(main())
