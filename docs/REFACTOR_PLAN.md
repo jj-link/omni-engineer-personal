@@ -4,24 +4,26 @@
 - [x] Basic test infrastructure is set up
 - [x] Project structure renamed for multi-model support
 - [x] Basic error handling tests implemented
+- [x] Provider selection implemented
+- [x] Common parameters added
 
 ## Phase 1: Provider Selection (HIGHEST PRIORITY)
 Goal: Enable switching between Ollama and CBORG at runtime
 
-### 1.1 Add Basic Provider Selection
-- [ ] Add --api argument to CLI:
+### 1.1 Add Basic Provider Selection 
+- [x] Add --api argument to CLI:
   ```python
   parser.add_argument('--api', choices=['cborg', 'ollama'], default='ollama')
   parser.add_argument('--model', help='Model name')
   ```
-- [ ] Add model selection logic in main()
-- [ ] Add tests for provider selection
+- [x] Add model selection logic in main()
+- [x] Add tests for provider selection
 
-### 1.2 Add Common Parameters
-- [ ] Add temperature control
-- [ ] Add top-p sampling
-- [ ] Add seed setting
-- [ ] Add tests for parameter handling
+### 1.2 Add Common Parameters 
+- [x] Add temperature control
+- [x] Add top-p sampling
+- [x] Add seed setting
+- [x] Add tests for parameter handling
 
 ### 1.3 Add Provider Configuration
 - [ ] Add provider config structure:
@@ -75,16 +77,16 @@ Goal: Add CBORG support now that foundation is ready
   - [ ] Response format
 
 ## Success Criteria
-- [ ] Switch between providers with single argument
+- [x] Switch between providers with single argument
 - [ ] Clear error messages and recovery
-- [ ] Common parameters work across providers
+- [x] Common parameters work across providers
 - [ ] Provider-specific features accessible
 - [ ] No loss of existing features
 - [ ] >90% test coverage
 
 ## Dependencies
 - [ ] aiohttp for CBORG API calls (Phase 3)
-- [ ] python-dotenv for API keys (Phase 1)
-- [ ] pytest for testing (All Phases)
-- [ ] rich for console output (existing)
-- [ ] ollama for Ollama support (existing)
+- [x] python-dotenv for API keys (Phase 1)
+- [x] pytest for testing (All Phases)
+- [x] rich for console output (existing)
+- [x] ollama for Ollama support (existing)
