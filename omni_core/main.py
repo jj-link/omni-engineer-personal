@@ -32,6 +32,9 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 import subprocess
 import shutil
 from typing import AsyncIterable
+import argparse
+from .cli import get_cli_config
+from .config import Configuration
 
 # Configure logging
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -329,7 +332,7 @@ You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model, 
 
 Available tools and their optimal use cases:
 
-<tools>
+<!--
 1. create_folders: Create new folders at the specified paths, including nested directories. Use this to create one or more directories in the project structure, even complex nested structures in a single operation.
 2. create_files: Generate one or more new files with specified content. Strive to make the files as complete and useful as possible.
 3. edit_and_apply_multiple: Examine and modify one or more existing files by instructing a separate AI coding agent. You are responsible for providing clear, detailed instructions for each file. When using this tool:
@@ -366,8 +369,8 @@ Available tools and their optimal use cases:
 9. scan_folder: Scan a specified folder and create a Markdown file with the contents of all coding text files, excluding binary files and common ignored folders. Use this tool to generate comprehensive documentation of project structures.
 10. run_shell_command: Execute a shell command and return its output. Use this tool when you need to run system commands or interact with the operating system. Ensure the command is safe and appropriate for the current operating system.
 IMPORTANT: Use this tool to install dependencies in the code_execution_env when using the execute_code tool.
-</tools>
-
+-->
+<!--
 <tool_usage_guidelines>
 Tool Usage Guidelines:
 - Always use the most appropriate tool for the task at hand.
@@ -396,6 +399,18 @@ Project Creation and Management:
 </project_management>
 
 Always strive for accuracy, clarity, and efficiency in your responses and actions. Your instructions must be precise and comprehensive. If uncertain, use the tavily_search tool or admit your limitations. When executing code, always remember that it runs in the isolated 'code_execution_env' virtual environment. Be aware of any long-running processes you start and manage them appropriately, including stopping them when they are no longer needed.
+
+<tool_usage_best_practices>
+When using tools:
+1. Carefully consider if a tool is necessary before using it.
+2. Ensure all required parameters are provided and valid.
+3. When using edit_and_apply_multiple, always structure your input as a dictionary with "files" (a list of file dictionaries) and "project_context" keys.
+4. Handle both successful results and errors gracefully.
+5. Provide clear explanations of tool usage and results to the user.
+</tool_usage_best_practices>
+
+Remember, you are an AI assistant, and your primary goal is to help the user accomplish their tasks effectively and efficiently while maintaining the integrity and security of their development environment.
+-->
 
 <tool_usage_best_practices>
 When using tools:
@@ -682,7 +697,7 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
         code_editor_tokens['output'] += response.usage.output_tokens
         code_editor_tokens['cache_write'] = response.usage.cache_creation_input_tokens
         code_editor_tokens['cache_read'] = response.usage.cache_read_input_tokens
-    
+
         ai_response_text = response.content[0].text  # Extract the text
     
         # If ai_response_text is a list, handle it
@@ -1239,7 +1254,7 @@ async def send_to_ai_for_executing(code, execution_result):
             ],
             extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"}
         )
-
+    
         # Update token usage for code execution
         code_execution_tokens['input'] += response.usage.input_tokens
         code_execution_tokens['output'] += response.usage.output_tokens
@@ -1353,7 +1368,8 @@ tools = [
                                 "required": ["path"]
                             }
                         }
-                    ]
+                    ],
+                    "description": "The path(s) of the file(s) to create. Use forward slashes (/) for path separation, even on Windows systems. Supports single or multiple file paths, directory paths, and wildcard patterns."
                 }
             },
             "required": ["files"]
@@ -1608,13 +1624,13 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
                     result = "Error: 'files' must be a dictionary or a list of dictionaries."
                     is_error = True
 
-                if not is_error:
-                    # Validate the structure of 'files'
-                    try:
-                        files = validate_files_structure(files)
-                    except ValueError as ve:
-                        result = f"Error: {str(ve)}"
-                        is_error = True
+            if not is_error:
+                # Validate the structure of 'files'
+                try:
+                    files = validate_files_structure(files)
+                except ValueError as ve:
+                    result = f"Error: {str(ve)}"
+                    is_error = True
 
             if not is_error:
                 result, console_output = await edit_and_apply_multiple(files, tool_input["project_context"], is_automode=automode)
@@ -2077,6 +2093,29 @@ async def test_voice_mode():
 
 async def main():
     global automode, conversation_history, use_tts, tts_enabled
+
+    # Get CLI configuration
+    cli_config = get_cli_config()
+    
+    # Initialize provider configuration
+    config = Configuration()
+    config.update_provider(cli_config["provider"])
+    config.update_model(cli_config["model"])
+    config.update_parameters(cli_config["parameters"])
+    
+    # Set automode if specified
+    if cli_config["auto_mode"]:
+        automode = True
+        max_iterations = cli_config["auto_mode"]
+    else:
+        max_iterations = MAX_CONTINUATION_ITERATIONS
+    
+    # Update system prompt if specified
+    if cli_config["system_prompt"]:
+        await update_system_prompt(system_prompt=cli_config["system_prompt"])
+    else:
+        await update_system_prompt()
+
     console.print(Panel("Welcome to the Claude-3-Sonnet Engineer Chat with Multi-Agent, Image, Voice, and Text-to-Speech Support!", title="Welcome", style="bold green"))
     console.print("Type 'exit' to end the conversation.")
     console.print("Type 'image' to include an image in your message.")
@@ -2099,7 +2138,7 @@ async def main():
                 cleanup_speech_recognition()
                 console.print(Panel("Exited voice input mode due to error. Returning to text input.", style="bold yellow"))
                 continue
-            
+        
             stay_in_voice_mode, command_result = process_voice_command(user_input)
             if not stay_in_voice_mode:
                 voice_mode = False
@@ -2111,6 +2150,7 @@ async def main():
             elif command_result:
                 console.print(Panel(command_result, style="cyan"))
                 continue
+        
         else:
             user_input = await get_user_input()
 
@@ -2221,7 +2261,15 @@ async def main():
     # Add more tests for other functions as needed
 
 if __name__ == "__main__":
-
+    def get_cli_config():
+        # Replace this with your actual CLI configuration handling
+        return {
+            "provider": "anthropic",
+            "model": "claude-3-5-sonnet-20241022",
+            "parameters": "{}",
+            "auto_mode": 10,
+            "system_prompt": ""
+        }
 
     # Run the main program
     try:

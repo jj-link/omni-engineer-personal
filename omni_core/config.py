@@ -1,121 +1,104 @@
-"""Configuration module for Omni Engineer.
-
-This module handles provider configuration, environment variables, and validation.
-"""
+"""Configuration module for Omni Engineer."""
 
 import os
 from typing import Dict, Any, Optional
 from dataclasses import dataclass, field
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Provider configurations
+PROVIDERS = {
+    'cborg': {
+        'env_key': 'CBORG_API_KEY',
+        'base_url': 'https://api.cborg.lbl.gov',
+        'default_model': 'lbl/cborg-coder:latest',
+        'requires_key': True
+    },
+    'ollama': {
+        'env_key': None,
+        'base_url': 'http://localhost:11434',
+        'default_model': 'codellama',
+        'requires_key': False
+    }
+}
 
 @dataclass
 class ProviderParameters:
-    """Common parameters across providers"""
+    """Model parameters configuration."""
     temperature: float = 0.7
     top_p: float = 0.9
     seed: Optional[int] = None
+    max_tokens: Optional[int] = None
 
 @dataclass
 class ProviderConfig:
-    """Configuration for a provider"""
+    """Provider-specific configuration."""
+    name: str
+    model: str
     base_url: str
-    default_model: str
-    requires_key: bool
+    api_key: Optional[str] = None
     parameters: ProviderParameters = field(default_factory=ProviderParameters)
 
-class ConfigurationError(Exception):
-    """Raised when there is a configuration error"""
-    pass
-
 class Configuration:
-    """Main configuration class"""
+    """Global configuration singleton."""
     _instance = None
+    _provider_config: Optional[ProviderConfig] = None
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
+            cls._instance = super(Configuration, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self):
-        if self._initialized:
-            return
-            
-        self.providers: Dict[str, ProviderConfig] = {
-            'cborg': ProviderConfig(
-                base_url='https://api.cborg.lbl.gov',
-                default_model='lbl/cborg-coder:latest',
-                requires_key=True
-            ),
-            'ollama': ProviderConfig(
-                base_url='http://localhost:11434',
-                default_model='codellama',
-                requires_key=False
-            )
-        }
-        self._initialized = True
+    @property
+    def provider_config(self) -> ProviderConfig:
+        """Get current provider configuration."""
+        if self._provider_config is None:
+            raise ValueError("Provider configuration not initialized")
+        return self._provider_config
 
-    def validate_environment(self) -> None:
-        """Validate required environment variables are present"""
-        # Check Tavily API key (always required)
-        if not os.getenv('TAVILY_API_KEY'):
-            raise ConfigurationError("TAVILY_API_KEY not found in environment variables")
+    def update_provider(self, provider_name: str) -> None:
+        """Update provider configuration."""
+        if provider_name not in PROVIDERS:
+            raise ValueError(f"Unsupported provider: {provider_name}")
 
-        # Check provider-specific keys
-        for name, provider in self.providers.items():
-            if provider.requires_key:
-                key_name = f"{name.upper()}_API_KEY"
-                if not os.getenv(key_name):
-                    raise ConfigurationError(f"{key_name} not found in environment variables")
+        provider = PROVIDERS[provider_name]
+        api_key = None
 
-    def get_provider(self, name: str) -> ProviderConfig:
-        """Get provider configuration by name"""
-        if name not in self.providers:
-            raise ConfigurationError(f"Unknown provider: {name}")
-        return self.providers[name]
+        if provider['requires_key']:
+            api_key = os.getenv(provider['env_key'])
+            if not api_key:
+                raise ValueError(
+                    f"API key not found. Set {provider['env_key']} environment variable."
+                )
 
-    def update_provider_model(self, name: str, model: str) -> None:
-        """Update the model for a provider"""
-        if name not in self.providers:
-            raise ConfigurationError(f"Unknown provider: {name}")
-        self.providers[name].default_model = model
+        self._provider_config = ProviderConfig(
+            name=provider_name,
+            model=provider['default_model'],
+            base_url=provider['base_url'],
+            api_key=api_key
+        )
 
-    def update_provider_parameters(self, name: str, **kwargs: Any) -> None:
-        """Update parameters for a provider"""
-        if name not in self.providers:
-            raise ConfigurationError(f"Unknown provider: {name}")
+    def update_model(self, model_name: str) -> None:
+        """Update model configuration."""
+        if self._provider_config is None:
+            raise ValueError("Provider not configured")
+        self._provider_config.model = model_name
+
+    def update_parameters(self, parameters: Dict[str, Any]) -> None:
+        """Update model parameters."""
+        if self._provider_config is None:
+            raise ValueError("Provider not configured")
         
-        provider = self.providers[name]
-        
-        if 'temperature' in kwargs:
-            temp = kwargs['temperature']
-            if not 0.0 <= temp <= 1.0:
-                raise ConfigurationError("Temperature must be between 0.0 and 1.0")
-            provider.parameters.temperature = temp
-            
-        if 'top_p' in kwargs:
-            top_p = kwargs['top_p']
-            if not 0.0 <= top_p <= 1.0:
-                raise ConfigurationError("Top-p must be between 0.0 and 1.0")
-            provider.parameters.top_p = top_p
-            
-        if 'seed' in kwargs:
-            provider.parameters.seed = kwargs['seed']
+        current_params = self._provider_config.parameters
+        for key, value in parameters.items():
+            if hasattr(current_params, key):
+                setattr(current_params, key, value)
+            else:
+                raise ValueError(f"Invalid parameter: {key}")
 
-    def get_api_key(self, name: str) -> Optional[str]:
-        """Get API key for a provider"""
-        if name not in self.providers:
-            raise ConfigurationError(f"Unknown provider: {name}")
+    def get_provider_url(self, endpoint: str) -> str:
+        """Get full URL for provider endpoint."""
+        if self._provider_config is None:
+            raise ValueError("Provider not configured")
         
-        provider = self.providers[name]
-        if not provider.requires_key:
-            return None
-            
-        key_name = f"{name.upper()}_API_KEY"
-        key = os.getenv(key_name)
-        if not key:
-            raise ConfigurationError(f"{key_name} not found in environment variables")
-        return key
+        base_url = self._provider_config.base_url.rstrip('/')
+        endpoint = endpoint.lstrip('/')
+        return f"{base_url}/{endpoint}"
