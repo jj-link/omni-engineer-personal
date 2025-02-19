@@ -37,6 +37,17 @@ class ProviderConfig:
     api_key: Optional[str] = None
     parameters: ProviderParameters = field(default_factory=ProviderParameters)
 
+    def get_provider_url(self, endpoint: str) -> str:
+        """Get provider-specific endpoint URL.
+        
+        Args:
+            endpoint: API endpoint path
+            
+        Returns:
+            Full URL for the endpoint
+        """
+        return f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
+
 class Configuration:
     """Global configuration singleton."""
     _instance = None
@@ -99,6 +110,4 @@ class Configuration:
         if self._provider_config is None:
             raise ValueError("Provider not configured")
         
-        base_url = self._provider_config.base_url.rstrip('/')
-        endpoint = endpoint.lstrip('/')
-        return f"{base_url}/{endpoint}"
+        return self._provider_config.get_provider_url(endpoint)

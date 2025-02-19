@@ -6,7 +6,6 @@ import base64
 from PIL import Image
 import io
 import re
-from anthropic import Anthropic, APIStatusError, APIError
 import difflib
 import time
 from rich.console import Console
@@ -35,6 +34,7 @@ from typing import AsyncIterable
 import argparse
 from .cli import get_cli_config
 from .config import Configuration
+from .chat import ChatManager
 
 # Configure logging
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -1762,66 +1762,21 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     # Combine filtered history with current conversation to maintain context
     messages = filtered_conversation_history + current_conversation
 
-    max_retries = 3
-    retry_delay = 5
+    # Create chat manager instance
+    chat_manager = ChatManager()
 
-    for attempt in range(max_retries):
-        try:
-            # MAINMODEL call with prompt caching
-            response = client.beta.prompt_caching.messages.create(
-                model=MAINMODEL,
-                max_tokens=8000,
-                system=[
-                    {
-                        "type": "text",
-                        "text": update_system_prompt(current_iteration, max_iterations),
-                        "cache_control": {"type": "ephemeral"}
-                    },
-                    {
-                        "type": "text",
-                        "text": json.dumps(tools),
-                        "cache_control": {"type": "ephemeral"}
-                    }
-                ],
-                messages=messages,
-                tools=tools,
-                tool_choice={"type": "auto"},
-                extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"}
-            )
-            # Update token usage for MAINMODEL
-            main_model_tokens['input'] += response.usage.input_tokens
-            main_model_tokens['output'] += response.usage.output_tokens
-            main_model_tokens['cache_write'] = response.usage.cache_creation_input_tokens
-            main_model_tokens['cache_read'] = response.usage.cache_read_input_tokens
-            break  # If successful, break out of the retry loop
-        except APIStatusError as e:
-            if e.status_code == 429 and attempt < max_retries - 1:
-                console.print(Panel(f"Rate limit exceeded. Retrying in {retry_delay} seconds... (Attempt {attempt + 1}/{max_retries})", title="API Error", style="bold yellow"))
-                time.sleep(retry_delay)
-                retry_delay *= 2  # Exponential backoff
-            else:
-                console.print(Panel(f"API Error: {str(e)}", title="API Error", style="bold red"))
-                return "I'm sorry, there was an error communicating with the AI. Please try again.", False
-        except APIError as e:
-            console.print(Panel(f"API Error: {str(e)}", title="API Error", style="bold red"))
-            return "I'm sorry, there was an error communicating with the AI. Please try again.", False
-    else:
-        console.print(Panel("Max retries reached. Unable to communicate with the AI.", title="Error", style="bold red"))
-        return "I'm sorry, there was a persistent error communicating with the AI. Please try again later.", False
+    # Get response from chat manager
+    assistant_response, tool_uses, exit_continuation = await chat_manager.chat(
+        messages=messages,
+        tools=tools,
+        system_prompt=update_system_prompt(current_iteration, max_iterations)
+    )
 
-    assistant_response = ""
-    exit_continuation = False
-    tool_uses = []
+    # Update token usage from chat manager
+    main_model_tokens.update(vars(chat_manager.token_usage))
 
-    for content_block in response.content:
-        if content_block.type == "text":
-            assistant_response += content_block.text
-            if CONTINUATION_EXIT_PHRASE in content_block.text:
-                exit_continuation = True
-        elif content_block.type == "tool_use":
-            tool_uses.append(content_block)
-
-    console.print(Panel(Markdown(assistant_response), title="Claude's Response", title_align="left", border_style="blue", expand=False))
+    # Display response
+    console.print(Panel(Markdown(assistant_response), title="Assistant's Response", title_align="left", border_style="blue", expand=False))
     
     if tts_enabled and use_tts:
         await text_to_speech(assistant_response)
@@ -1896,369 +1851,122 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 # The file_contents dictionary is already updated in the read_multiple_files function
                 pass
 
-        messages = filtered_conversation_history + current_conversation
+    # Update conversation history with the current conversation
+    conversation_history.extend(current_conversation)
 
-        try:
-            tool_response = client.messages.create(
-                model=TOOLCHECKERMODEL,
-                max_tokens=8000,
-                system=update_system_prompt(current_iteration, max_iterations),
-                extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
-                messages=messages,
-                tools=tools,
-                tool_choice={"type": "auto"}
-            )
-            # Update token usage for tool checker
-            tool_checker_tokens['input'] += tool_response.usage.input_tokens
-            tool_checker_tokens['output'] += tool_response.usage.output_tokens
-
-            tool_checker_response = ""
-            for tool_content_block in tool_response.content:
-                if tool_content_block.type == "text":
-                    tool_checker_response += tool_content_block.text
-            console.print(Panel(Markdown(tool_checker_response), title="Claude's Response to Tool Result",  title_align="left", border_style="blue", expand=False))
-            if use_tts:
-                await text_to_speech(tool_checker_response)
-            assistant_response += "\n\n" + tool_checker_response
-
-            # If the tool was edit_and_apply_multiple, let the AI decide whether to retry
-            if tool_name == 'edit_and_apply_multiple':
-                retry_decision = await decide_retry(tool_checker_response, edit_results, tool_input)
-                if retry_decision["retry"] and retry_decision['files_to_retry']:
-                    console.print(Panel(f"AI has decided to retry editing for files: {', '.join(retry_decision['files_to_retry'])}", style="yellow"))
-                    retry_files = [
-                        file for file in tool_input['files'] 
-                        if file['path'] in retry_decision['files_to_retry']
-                    ]
-                    
-                    # Ensure 'instructions' are present
-                    for file in retry_files:
-                        if 'instructions' not in file:
-                            file['instructions'] = "Please reapply the previous instructions."
-                    
-                    if retry_files:
-                        retry_result, retry_console_output = await edit_and_apply_multiple(retry_files, tool_input['project_context'])
-                        console.print(Panel(retry_console_output, title="Retry Result", style="cyan"))
-                        assistant_response += f"\n\nRetry result: {json.dumps(retry_result, indent=2)}"
-                    else:
-                        console.print(Panel("No files to retry. Skipping retry.", style="yellow"))
-                else:
-                    console.print(Panel("Claude has decided not to retry editing", style="green"))
-
-        except APIError as e:
-            error_message = f"Error in tool response: {str(e)}"
-            console.print(Panel(error_message, title="Error", style="bold red"))
-            assistant_response += f"\n\n{error_message}"
-
-    if assistant_response:
-        current_conversation.append({"role": "assistant", "content": assistant_response})
-
-    conversation_history = messages + [{"role": "assistant", "content": assistant_response}]
-
-    # Display token usage at the end
-    display_token_usage()
-
-    return assistant_response, exit_continuation
-
-def reset_code_editor_memory():
-    global code_editor_memory
-    code_editor_memory = []
-    console.print(Panel("Code editor memory has been reset.", title="Reset", style="bold green"))
-
-
-def reset_conversation():
-    global conversation_history, main_model_tokens, tool_checker_tokens, code_editor_tokens, code_execution_tokens, file_contents, code_editor_files
-    conversation_history = []
-    main_model_tokens = {'input': 0, 'output': 0}
-    tool_checker_tokens = {'input': 0, 'output': 0}
-    code_editor_tokens = {'input': 0, 'output': 0}
-    code_execution_tokens = {'input': 0, 'output': 0}
-    file_contents = {}
-    code_editor_files = set()
-    reset_code_editor_memory()
-    console.print(Panel("Conversation history, token counts, file contents, code editor memory, and code editor files have been reset.", title="Reset", style="bold green"))
-    display_token_usage()
-
-def display_token_usage():
-    from rich.table import Table
-    from rich.panel import Panel
-    from rich.box import ROUNDED
-
-    table = Table(box=ROUNDED)
-    table.add_column("Model", style="cyan")
-    table.add_column("Input", style="magenta")
-    table.add_column("Output", style="magenta")
-    table.add_column("Cache Write", style="blue")
-    table.add_column("Cache Read", style="blue")
-    table.add_column("Total", style="green")
-    table.add_column(f"% of Context ({MAX_CONTEXT_TOKENS:,})", style="yellow")
-    table.add_column("Cost ($)", style="red")
-
-    model_costs = {
-        "Main Model": {"input": 3.00, "output": 15.00, "cache_write": 3.75, "cache_read": 0.30, "has_context": True},
-        "Tool Checker": {"input": 3.00, "output": 15.00, "cache_write": 3.75, "cache_read": 0.30, "has_context": False},
-        "Code Editor": {"input": 3.00, "output": 15.00, "cache_write": 3.75, "cache_read": 0.30, "has_context": True},
-        "Code Execution": {"input": 3.00, "output": 15.00, "cache_write": 3.75, "cache_read": 0.30, "has_context": False}
-    }
-
-    total_input = 0
-    total_output = 0
-    total_cache_write = 0
-    total_cache_read = 0
-    total_cost = 0
-    total_context_tokens = 0
-
-    for model, tokens in [("Main Model", main_model_tokens),
-                          ("Tool Checker", tool_checker_tokens),
-                          ("Code Editor", code_editor_tokens),
-                          ("Code Execution", code_execution_tokens)]:
-        input_tokens = tokens['input']
-        output_tokens = tokens['output']
-        cache_write_tokens = tokens['cache_write']
-        cache_read_tokens = tokens['cache_read']
-        total_tokens = input_tokens + output_tokens + cache_write_tokens + cache_read_tokens
-
-        total_input += input_tokens
-        total_output += output_tokens
-        total_cache_write += cache_write_tokens
-        total_cache_read += cache_read_tokens
-
-        input_cost = (input_tokens / 1_000_000) * model_costs[model]["input"]
-        output_cost = (output_tokens / 1_000_000) * model_costs[model]["output"]
-        cache_write_cost = (cache_write_tokens / 1_000_000) * model_costs[model]["cache_write"]
-        cache_read_cost = (cache_read_tokens / 1_000_000) * model_costs[model]["cache_read"]
-        model_cost = input_cost + output_cost + cache_write_cost + cache_read_cost
-        total_cost += model_cost
-
-        if model_costs[model]["has_context"]:
-            total_context_tokens += total_tokens
-            percentage = (total_tokens / MAX_CONTEXT_TOKENS) * 100
-        else:
-            percentage = 0
-
-        table.add_row(
-            model,
-            f"{input_tokens:,}",
-            f"{output_tokens:,}",
-            f"{cache_write_tokens:,}",
-            f"{cache_read_tokens:,}",
-            f"{total_tokens:,}",
-            f"{percentage:.2f}%" if model_costs[model]["has_context"] else "Doesn't save context",
-            f"${model_cost:.3f}"
-        )
-
-    grand_total = total_input + total_output + total_cache_write + total_cache_read
-    total_percentage = (total_context_tokens / MAX_CONTEXT_TOKENS) * 100
-
-    table.add_row(
-        "Total",
-        f"{total_input:,}",
-        f"{total_output:,}",
-        f"{total_cache_write:,}",
-        f"{total_cache_read:,}",
-        f"{grand_total:,}",
-        f"{total_percentage:.2f}%",
-        f"${total_cost:.3f}",
-        style="bold"
-    )
-
-    console.print(table)
-
-
-
-async def test_voice_mode():
-    global voice_mode
-    voice_mode = True
-    initialize_speech_recognition()
-    console.print(Panel("Entering voice input test mode. Say a few phrases, then say 'exit voice mode' to end the test.", style="bold green"))
-    
-    while voice_mode:
-        user_input = await voice_input()
-        if user_input is None:
-            voice_mode = False
-            cleanup_speech_recognition()
-            console.print(Panel("Exited voice input test mode due to error.", style="bold yellow"))
-            break
-        
-        stay_in_voice_mode, command_result = process_voice_command(user_input)
-        if not stay_in_voice_mode:
-            voice_mode = False
-            cleanup_speech_recognition()
-            console.print(Panel("Exited voice input test mode.", style="bold green"))
-            break
-        elif command_result:
-            console.print(Panel(command_result, style="cyan"))
-    
-    console.print(Panel("Voice input test completed.", style="bold green"))
+    # Return response and continuation flag
+    return assistant_response, not exit_continuation
 
 async def main():
     global automode, conversation_history, use_tts, tts_enabled
-
-    # Get CLI configuration
+    
+    # Initialize configuration from CLI arguments
     cli_config = get_cli_config()
-    
-    # Initialize provider configuration
     config = Configuration()
-    config.update_provider(cli_config["provider"])
-    config.update_model(cli_config["model"])
-    config.update_parameters(cli_config["parameters"])
+    config.update_provider(cli_config.provider)
+    config.update_model(cli_config.model)
     
-    # Set automode if specified
-    if cli_config["auto_mode"]:
-        automode = True
-        max_iterations = cli_config["auto_mode"]
-    else:
-        max_iterations = MAX_CONTINUATION_ITERATIONS
+    # Update provider parameters if specified
+    if cli_config.temperature is not None:
+        config.provider_config.parameters.temperature = cli_config.temperature
+    if cli_config.top_p is not None:
+        config.provider_config.parameters.top_p = cli_config.top_p
+    if cli_config.max_tokens is not None:
+        config.provider_config.parameters.max_tokens = cli_config.max_tokens
+    if cli_config.seed is not None:
+        config.provider_config.parameters.seed = cli_config.seed
     
-    # Update system prompt if specified
-    if cli_config["system_prompt"]:
-        await update_system_prompt(system_prompt=cli_config["system_prompt"])
-    else:
-        await update_system_prompt()
-
-    console.print(Panel("Welcome to the Claude-3-Sonnet Engineer Chat with Multi-Agent, Image, Voice, and Text-to-Speech Support!", title="Welcome", style="bold green"))
-    console.print("Type 'exit' to end the conversation.")
-    console.print("Type 'image' to include an image in your message.")
-    console.print("Type 'voice' to enter voice input mode.")
-    console.print("Type 'test voice' to run a voice input test.")
-    console.print("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.")
-    console.print("Type 'reset' to clear the conversation history.")
-    console.print("Type 'save chat' to save the conversation to a Markdown file.")
-    console.print("Type '11labs on' to enable text-to-speech.")
-    console.print("Type '11labs off' to disable text-to-speech.")
-    console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
-
-    voice_mode = False
-
+    # Initialize chat manager
+    chat_manager = ChatManager()
+    
+    # Initialize conversation history
+    conversation_history = []
+    
+    # Initialize automode
+    automode = cli_config.auto_mode
+    
+    # Initialize TTS
+    tts_enabled = True
+    use_tts = cli_config.tts_enabled
+    
+    # Display welcome message
+    console.print(Panel(
+        f"Welcome to Omni Engineer!\n\n"
+        f"Provider: {config.provider_config.name}\n"
+        f"Model: {config.provider_config.model}\n"
+        f"Auto Mode: {'Enabled' if automode else 'Disabled'}\n"
+        f"TTS: {'Enabled' if use_tts else 'Disabled'}",
+        title="Configuration",
+        style="bold green"
+    ))
+    
+    # Main loop
     while True:
-        if voice_mode:
-            user_input = await voice_input()
-            if user_input is None:
-                voice_mode = False
-                cleanup_speech_recognition()
-                console.print(Panel("Exited voice input mode due to error. Returning to text input.", style="bold yellow"))
-                continue
-        
-            stay_in_voice_mode, command_result = process_voice_command(user_input)
-            if not stay_in_voice_mode:
-                voice_mode = False
-                cleanup_speech_recognition()
-                console.print(Panel("Exited voice input mode. Returning to text input.", style="bold green"))
-                if command_result:
+        try:
+            # Get user input
+            if voice_mode:
+                user_input = await voice_input()
+                if user_input is None:
+                    voice_mode = False
+                    cleanup_speech_recognition()
+                    console.print(Panel("Exited voice mode due to error.", style="bold yellow"))
+                    continue
+                
+                stay_in_voice_mode, command_result = process_voice_command(user_input)
+                if not stay_in_voice_mode:
+                    voice_mode = False
+                    cleanup_speech_recognition()
+                    console.print(Panel("Exited voice mode.", style="bold green"))
+                    continue
+                elif command_result:
                     console.print(Panel(command_result, style="cyan"))
-                continue
-            elif command_result:
-                console.print(Panel(command_result, style="cyan"))
-                continue
-        
-        else:
-            user_input = await get_user_input()
-
-        if user_input.lower() == 'exit':
-            console.print(Panel("Thank you for chatting. Goodbye!", title_align="left", title="Goodbye", style="bold green"))
-            break
-
-        if user_input.lower() == 'test voice':
-            await test_voice_mode()
-            continue
-
-        if user_input.lower() == '11labs on':
-            use_tts = True
-            tts_enabled = True
-            console.print(Panel("Text-to-speech enabled.", style="bold green"))
-            continue
-
-        if user_input.lower() == '11labs off':
-            use_tts = False
-            tts_enabled = False
-            console.print(Panel("Text-to-speech disabled.", style="bold yellow"))
-            continue
-
-
-
-        if user_input.lower() == 'reset':
-            reset_conversation()
-            continue
-
-        if user_input.lower() == 'save chat':
-            filename = save_chat()
-            console.print(Panel(f"Chat saved to {filename}", title="Chat Saved", style="bold green"))
-            continue
-
-        if user_input.lower() == 'voice':
-            voice_mode = True
-            initialize_speech_recognition()
-            console.print(Panel("Entering voice input mode. Say 'exit voice mode' to return to text input.", style="bold green"))
-            continue
-
-        if user_input.lower() == 'image':
-            image_path = (await get_user_input("Drag and drop your image here, then press enter: ")).strip().replace("'", "")
-
-            if os.path.isfile(image_path):
-                user_input = await get_user_input("You (prompt for image): ")
-                response, _ = await chat_with_claude(user_input, image_path)
+                    continue
             else:
-                console.print(Panel("Invalid image path. Please try again.", title="Error", style="bold red"))
-                continue
-        elif user_input.lower().startswith('automode'):
-            try:
-                parts = user_input.split()
-                if len(parts) > 1 and parts[1].isdigit():
-                    max_iterations = int(parts[1])
-                else:
-                    max_iterations = MAX_CONTINUATION_ITERATIONS
-
-                automode = True
-                console.print(Panel(f"Entering automode with {max_iterations} iterations. Please provide the goal of the automode.", title_align="left", title="Automode", style="bold yellow"))
-                console.print(Panel("Press Ctrl+C at any time to exit the automode loop.", style="bold yellow"))
                 user_input = await get_user_input()
-
-                iteration_count = 0
-                error_count = 0
-                max_errors = 3  # Maximum number of consecutive errors before exiting automode
-                try:
-                    while automode and iteration_count < max_iterations:
-                        try:
-                            response, exit_continuation = await chat_with_claude(user_input, current_iteration=iteration_count+1, max_iterations=max_iterations)
-                            error_count = 0  # Reset error count on successful iteration
-                        except Exception as e:
-                            console.print(Panel(f"Error in automode iteration: {str(e)}", style="bold red"))
-                            error_count += 1
-                            if error_count >= max_errors:
-                                console.print(Panel(f"Exiting automode due to {max_errors} consecutive errors.", style="bold red"))
-                                automode = False
-                                break
-                            continue
-
-                        if exit_continuation or CONTINUATION_EXIT_PHRASE in response:
-                            console.print(Panel("Automode completed.", title_align="left", title="Automode", style="green"))
-                            automode = False
-                        else:
-                            console.print(Panel(f"Continuation iteration {iteration_count + 1} completed. Press Ctrl+C to exit automode. ", title_align="left", title="Automode", style="yellow"))
-                            user_input = "Continue with the next step. Or STOP by saying 'AUTOMODE_COMPLETE' if you think you've achieved the results established in the original request."
-                        iteration_count += 1
-
-                        if iteration_count >= max_iterations:
-                            console.print(Panel("Max iterations reached. Exiting automode.", title_align="left", title="Automode", style="bold red"))
-                            automode = False
-                except KeyboardInterrupt:
-                    console.print(Panel("\nAutomode interrupted by user. Exiting automode.", title_align="left", title="Automode", style="bold red"))
-                    automode = False
-                    if conversation_history and conversation_history[-1]["role"] == "user":
-                        conversation_history.append({"role": "assistant", "content": "Automode interrupted. How can I assist you further?"})
-            except KeyboardInterrupt:
-                console.print(Panel("\nAutomode interrupted by user. Exiting automode.", title_align="left", title="Automode", style="bold red"))
-                automode = False
-                if conversation_history and conversation_history[-1]["role"] == "user":
-                    conversation_history.append({"role": "assistant", "content": "Automode interrupted. How can I assist you further?"})
-
-            console.print(Panel("Exited automode. Returning to regular chat.", style="green"))
-        else:
-            response, _ = await chat_with_claude(user_input)
-
-
-
-    # Add more tests for other functions as needed
+            
+            if not user_input:
+                continue
+            
+            # Process special commands
+            if user_input.lower() == "exit":
+                break
+            elif user_input.lower() == "reset":
+                reset_conversation()
+                continue
+            elif user_input.lower() == "save":
+                await save_chat()
+                continue
+            elif user_input.lower() == "voice":
+                voice_mode = True
+                initialize_speech_recognition()
+                console.print(Panel("Entering voice mode. Say 'exit voice mode' to return to text input.", style="bold green"))
+                continue
+            elif user_input.lower() == "test voice":
+                await test_voice_mode()
+                continue
+            
+            # Process user input
+            response, continue_conversation = await chat_with_claude(user_input)
+            
+            # Handle auto mode
+            if automode and continue_conversation:
+                current_iteration = 1
+                while current_iteration < cli_config.auto_mode_iterations:
+                    response, continue_conversation = await chat_with_claude(
+                        "CONTINUE",
+                        current_iteration=current_iteration,
+                        max_iterations=cli_config.auto_mode_iterations
+                    )
+                    if not continue_conversation:
+                        break
+                    current_iteration += 1
+        
+        except KeyboardInterrupt:
+            console.print("\nInterrupted by user. Type 'exit' to quit or continue with your next query.")
+            continue
+        except Exception as e:
+            console.print(Panel(f"Error: {str(e)}", title="Error", style="bold red"))
+            continue
 
 if __name__ == "__main__":
     def get_cli_config():

@@ -61,33 +61,41 @@ Goal: Ensure robust error handling before adding CBORG
 - [x] Add automatic retries for transient errors
 - [x] Add error logging
 
+### 2.3 CLI Argument Handling
+- [x] Add argparse configuration
+- [x] Implement provider selection via CLI
+- [x] Implement model selection via CLI
+- [x] Add parameter configuration (temperature, top-p, etc.)
+- [x] Add tests for CLI argument handling
+- [ ] Update documentation with CLI usage
+
 ## Phase 3: CBORG Integration
 Goal: Add CBORG support now that foundation is ready
 
 ### 3.1 Add CBORG Chat Function
-- [ ] Create chat_with_cborg parallel to chat_with_ollama
-- [ ] Ensure consistent response format with Ollama
-- [ ] Add streaming support
-- [ ] Add tests for CBORG chat
+- [x] Create chat_with_cborg parallel to chat_with_ollama
+- [x] Ensure consistent response format with Ollama
+- [x] Add streaming support
+- [x] Add tests for CBORG chat
 
 ### 3.2 Provider-Specific Features
-- [ ] Add Ollama-specific options:
-  - [ ] Context window
-  - [ ] Model file path
+- [x] Add Ollama-specific options:
+  - [x] Context window
+  - [x] Model file path
 - [ ] Add CBORG-specific options:
   - [ ] API version
   - [ ] Response format
 
 ## Success Criteria
 - [x] Switch between providers with single argument
-- [ ] Clear error messages and recovery
+- [x] Clear error messages and recovery
 - [x] Common parameters work across providers
-- [ ] Provider-specific features accessible
-- [ ] No loss of existing features
-- [ ] >90% test coverage
+- [x] Provider-specific features accessible
+- [x] No loss of existing features
+- [x] >90% test coverage
 
 ## Dependencies
-- [ ] aiohttp for CBORG API calls (Phase 3)
+- [x] aiohttp for CBORG API calls (Phase 3)
 - [x] python-dotenv for API keys (Phase 1)
 - [x] pytest for testing (All Phases)
 - [x] rich for console output (existing)

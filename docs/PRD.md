@@ -77,6 +77,25 @@ parser.add_argument('--seed', type=int)
 parser.add_argument('--ollama-url', default='http://localhost:11434')
 ```
 
+### 5. Command Line Argument Handling
+```bash
+# Example CLI usage
+omni-engineer --provider ollama --model codellama --temperature 0.7 --top-p 0.9
+omni-engineer --provider cborg --model lbl/cborg-coder:latest
+```
+
+Required Arguments:
+- `--provider`: Model provider (ollama/cborg)
+- `--model`: Model name/path
+
+Optional Arguments:
+- `--temperature`: Sampling temperature (0.0-1.0)
+- `--top-p`: Nucleus sampling parameter (0.0-1.0)
+- `--seed`: Random seed for reproducibility
+- `--max-tokens`: Maximum tokens in response
+- `--system-prompt`: Custom system prompt
+- `--auto-mode`: Start in auto mode with specified iterations
+
 ## Implementation Strategy
 
 ### Phase 1: Test Coverage (Week 1)
