@@ -41,8 +41,8 @@ class ModelClient(ABC):
             result = urlparse(url)
             if not all([result.scheme, result.netloc]):
                 raise ValueError(f"Invalid URL format: {url}")
-        except Exception as e:
-            raise ValueError(f"Invalid URL: {url}") from e
+        except Exception:
+            raise ValueError(f"Invalid URL format: {url}")
 
 class CBORGClient(ModelClient):
     """Client for CBORG API."""
@@ -71,7 +71,11 @@ class CBORGClient(ModelClient):
             json=data
         )
         response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
+        
+        try:
+            return response.json()["choices"][0]["message"]["content"]
+        except (KeyError, IndexError) as e:
+            raise KeyError("Malformed response from CBORG API") from e
     
     def stream(self, prompt: str, params: ModelParameters) -> str:
         """Stream text from CBORG model."""
@@ -119,7 +123,11 @@ class OllamaClient(ModelClient):
             json=data
         )
         response.raise_for_status()
-        return response.json()["response"]
+        
+        try:
+            return response.json()["response"]
+        except KeyError as e:
+            raise KeyError("Malformed response from Ollama API") from e
     
     def stream(self, prompt: str, params: ModelParameters) -> str:
         """Stream text from Ollama model."""
