@@ -1,5 +1,7 @@
 # Refactor Plan: Adding Multi-Model Support
 
+> ⚠️ **IMPORTANT**: This plan must be updated to mark completed items BEFORE committing any code changes. This ensures we maintain an accurate record of progress.
+
 ## Current Status
 - [x] Basic test infrastructure is set up
 - [x] Project structure renamed for multi-model support
@@ -25,8 +27,8 @@ Goal: Enable switching between Ollama and CBORG at runtime
 - [x] Add seed setting
 - [x] Add tests for parameter handling
 
-### 1.3 Add Provider Configuration
-- [ ] Add provider config structure:
+### 1.3 Add Provider Configuration 
+- [x] Add provider config structure:
   ```python
   PROVIDER_CONFIG = {
       'cborg': {
@@ -41,8 +43,8 @@ Goal: Enable switching between Ollama and CBORG at runtime
       }
   }
   ```
-- [ ] Add environment variable handling
-- [ ] Add config validation
+- [x] Add environment variable handling
+- [x] Add config validation
 
 ## Phase 2: Error Handling (HIGH PRIORITY)
 Goal: Ensure robust error handling before adding CBORG
