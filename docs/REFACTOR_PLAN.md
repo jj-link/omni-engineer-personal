@@ -32,6 +32,16 @@ Add CBORG support to the existing engine.py while maintaining all current functi
   - [ ] Streaming responses
   - [ ] Progress indicators
   - [ ] Status messages
+- [ ] Enhance model selector UI:
+  - [ ] Implement hierarchical dropdown with provider groups
+  - [ ] Add provider icons/logos for each group
+  - [ ] Add model descriptions and capabilities as tooltips
+  - [ ] Implement search/filter functionality
+  - [ ] Add visual indicators for model status
+  - [ ] Improve mobile responsiveness
+  - [ ] Add keyboard navigation support
+  - [ ] Add "Recently Used" or "Favorites" section
+  - [ ] Persist user preferences (last used model, favorites)
 
 ## Phase 2: CBORG Configuration
 - [x] Add CBORG configuration to engine.py:
@@ -84,6 +94,148 @@ Add CBORG support to the existing engine.py while maintaining all current functi
 - [ ] Verify all existing features work with both providers
 - [ ] Test error handling scenarios
 - [ ] Document any CBORG-specific behavior
+
+## Phase 6: UI/UX Implementation
+- [ ] Implement new layout structure:
+  - [ ] Create left sidebar component (250px width)
+  - [ ] Add collapsible toggle button for sidebar
+  - [ ] Create main chat area with max-width 1200px
+  - [ ] Add proper padding (24px) and margins
+  - [ ] Implement CSS Grid for responsive layout
+
+- [ ] Update typography and colors:
+  - [ ] Set system font stack (system-ui, -apple-system, etc.)
+  - [ ] Define font sizes (14px body, 16px headers)
+  - [ ] Implement CBORG color palette:
+    - Primary: #2563eb (blue)
+    - Background: #ffffff
+    - Text: #1e293b
+    - Border: #e2e8f0
+    - Hover: #f1f5f9
+
+- [ ] Revamp message display:
+  - [ ] Create distinct message bubbles:
+    - User: Right-aligned, blue background
+    - Assistant: Left-aligned, white with border
+  - [ ] Add 16px gap between messages
+  - [ ] Style code blocks:
+    - Padding: 12px
+    - Border radius: 6px
+    - Background: #f8fafc
+    - Font: Menlo, Monaco, monospace
+    - Add copy button in top-right
+  - [ ] Configure highlight.js with:
+    - Theme: github-light
+    - Languages: python, javascript, html, css, bash
+  - [ ] Add markdown parsing with marked.js options:
+    - gfm: true
+    - breaks: true
+    - highlight: use highlight.js
+
+- [ ] Create new model selector:
+  - [ ] Build dropdown component:
+    - Width: 300px
+    - Max height: 400px
+    - Shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1)
+  - [ ] Add provider sections:
+    - Header with 20x20px icon
+    - Group models by provider
+    - Sticky headers on scroll
+  - [ ] Design model list items:
+    - Model name in larger font (16px)
+    - Description text below in gray (14px)
+    - Two-line description with ellipsis
+    - Proper padding (16px)
+    - Hover state background
+  - [ ] Implement search:
+    - Sticky search bar at top
+    - Filter by model name and description
+    - Highlight matching text
+  - [ ] Add capability badges:
+    - Code: Blue pill
+    - Vision: Teal pill
+    - Chat: Indigo pill
+    - Fast: Amber pill
+  - [ ] Add keyboard navigation:
+    - Arrow keys to move
+    - Enter to select
+    - Escape to close
+  - [ ] Store in localStorage:
+    - Last 3 used models
+    - Favorite models
+
+- [ ] Enhance input area:
+  - [ ] Create auto-expanding textarea:
+    - Min height: 56px
+    - Max height: 200px
+    - Padding: 16px
+  - [ ] Add file upload:
+    - Drag and drop zone
+    - Preview thumbnails
+    - Progress indicator
+    - Size limit warning
+  - [ ] Implement command palette:
+    - Trigger with "/"
+    - Commands list popup
+    - Keyboard navigation
+  - [ ] Add shortcuts:
+    - Ctrl+Enter: Send
+    - Ctrl+B: Bold
+    - Ctrl+I: Italic
+    - Ctrl+K: Code
+  - [ ] Show character count:
+    - Update in real-time
+    - Warning at 90% limit
+    - Error at limit
+  - [ ] Add speech-to-text input:
+    - Microphone button in input area
+    - Use Web Speech API
+    - Show audio input level indicator
+    - Add visual feedback during recording
+    - Support common voice commands:
+      - "new line"
+      - "period"
+      - "question mark"
+      - "exclamation mark"
+    - Handle browser permission requests
+    - Fallback for unsupported browsers
+
+- [ ] Implement responsive design:
+  - [ ] Define breakpoints in Tailwind:
+    - sm: 640px
+    - md: 768px
+    - lg: 1024px
+    - xl: 1280px
+  - [ ] Create mobile navigation:
+    - Hamburger menu
+    - Slide-in sidebar
+    - Bottom navigation bar
+  - [ ] Adjust message layout:
+    - Full width on mobile
+    - Readable line length on desktop
+    - Proper image scaling
+  - [ ] Optimize for touch:
+    - Min tap target: 44px
+    - Touch-friendly dropdowns
+    - Swipe gestures for sidebar
+
+- [ ] Add loading states:
+  - [ ] Create typing indicator:
+    - Three dots animation
+    - 600ms duration
+    - Subtle fade in/out
+  - [ ] Implement loading skeletons:
+    - Message bubble shape
+    - Code block shape
+    - Image placeholder
+  - [ ] Add transitions:
+    - Menu slides: 200ms
+    - Fade in/out: 150ms
+    - Height animations: 250ms
+  - [ ] Show upload progress:
+    - Linear progress bar
+    - Percentage indicator
+    - Cancel button
 
 ## Success Criteria
 1. [ ] Can switch between Ollama and CBORG using web interface
