@@ -33,13 +33,13 @@ Add CBORG support to the existing engine.py while maintaining all current functi
   - [ ] Progress indicators
   - [ ] Status messages
 - [ ] Enhance model selector UI:
-  - [ ] Implement hierarchical dropdown with provider groups
+  - [x] Implement hierarchical dropdown with provider groups
+  - [x] Add model descriptions and capabilities as tooltips
+  - [x] Implement search/filter functionality
+  - [x] Add visual indicators for model status
+  - [x] Improve mobile responsiveness
+  - [x] Add keyboard navigation support
   - [ ] Add provider icons/logos for each group
-  - [ ] Add model descriptions and capabilities as tooltips
-  - [ ] Implement search/filter functionality
-  - [ ] Add visual indicators for model status
-  - [ ] Improve mobile responsiveness
-  - [ ] Add keyboard navigation support
   - [ ] Add "Recently Used" or "Favorites" section
   - [ ] Persist user preferences (last used model, favorites)
 

@@ -261,19 +261,17 @@ function appendToolUsage(toolName) {
 
 // Add this function near the top of your file
 function updateTokenUsage(usedTokens, maxTokens) {
+    const tokenDisplay = document.getElementById('token-display');
+    const tokenBar = document.getElementById('token-progress');
+    
+    if (!tokenDisplay || !tokenBar) return;  // Skip if elements don't exist
+    
+    tokenDisplay.textContent = `${usedTokens.toLocaleString()} / ${maxTokens.toLocaleString()}`;
+    
     const percentage = (usedTokens / maxTokens) * 100;
-    const tokenBar = document.getElementById('token-bar');
-    const tokensUsed = document.getElementById('tokens-used');
-    const tokenPercentage = document.getElementById('token-percentage');
-    
-    // Update the numbers
-    tokensUsed.textContent = usedTokens.toLocaleString();
-    tokenPercentage.textContent = `${percentage.toFixed(1)}%`;
-    
-    // Update the bar
     tokenBar.style.width = `${percentage}%`;
     
-    // Update colors based on usage
+    // Update color based on usage
     tokenBar.classList.remove('warning', 'danger');
     if (percentage > 90) {
         tokenBar.classList.add('danger');
@@ -377,25 +375,33 @@ window.addEventListener('load', async () => {
         });
         
         if (!response.ok) {
-            console.error('Failed to reset conversation');
+            throw new Error('Failed to reset conversation');
         }
         
         // Clear any existing messages except the first one
         const messagesDiv = document.getElementById('chat-messages');
-        const messages = messagesDiv.getElementsByClassName('message-wrapper');
-        while (messages.length > 1) {
-            messages[1].remove();
+        if (messagesDiv) {
+            const messages = messagesDiv.getElementsByClassName('message-wrapper');
+            while (messages.length > 1) {
+                messages[1].remove();
+            }
         }
         
         // Reset any other state
         currentImageData = null;
-        document.getElementById('image-preview')?.classList.add('hidden');
-        document.getElementById('file-input').value = '';
-        document.getElementById('message-input').value = '';
+        const imagePreview = document.getElementById('image-preview');
+        const fileInput = document.getElementById('file-input');
+        const messageInput = document.getElementById('message-input');
+        
+        if (imagePreview) imagePreview.classList.add('hidden');
+        if (fileInput) fileInput.value = '';
+        if (messageInput) messageInput.value = '';
+        
         resetTextarea();
         
-        // Reset token usage display
+        // Reset token usage display if the elements exist
         updateTokenUsage(0, 200000);
+        
     } catch (error) {
         console.error('Error resetting conversation:', error);
     }

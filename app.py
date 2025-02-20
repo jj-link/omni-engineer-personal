@@ -454,9 +454,13 @@ def upload_file():
 
 @app.route('/reset', methods=['POST'])
 def reset():
-    # Reset the assistant's conversation history
-    assistant.reset()
-    return jsonify({'status': 'success'})
+    try:
+        # Reset the assistant's conversation history
+        assistant.reset()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        print(f"Error in reset: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=False)
