@@ -1,3 +1,82 @@
+// Model selection functionality
+async function fetchModels() {
+    try {
+        const response = await fetch('/models');
+        const data = await response.json();
+        console.log('Models response:', data);  // Debug log
+        
+        const modelSelect = document.getElementById('model-select');
+        modelSelect.innerHTML = ''; // Clear existing options
+        
+        // Add a disabled placeholder option
+        const placeholderOption = document.createElement('option');
+        placeholderOption.value = '';
+        placeholderOption.textContent = 'Select a model...';
+        placeholderOption.disabled = true;
+        modelSelect.appendChild(placeholderOption);
+        
+        // Add all available models
+        data.models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model;
+            option.textContent = model;
+            // Select if it matches current_model from backend
+            if (model === data.current_model) {
+                option.selected = true;
+            }
+            modelSelect.appendChild(option);
+        });
+
+        // If no model is selected, select the default
+        if (!modelSelect.value && data.default_model) {
+            modelSelect.value = data.default_model;
+        }
+
+        // Make sure the select is visible
+        modelSelect.style.display = 'block';
+        modelSelect.parentElement.style.display = 'flex';
+    } catch (error) {
+        console.error('Error fetching models:', error);
+        appendMessage('Error loading models. Please try refreshing the page.', false);
+    }
+}
+
+async function switchModel(model) {
+    try {
+        const response = await fetch('/switch_model', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ model }),
+        });
+        
+        const data = await response.json();
+        if (!data.success) {
+            throw new Error(data.error || 'Failed to switch model');
+        }
+        
+        appendMessage(`Switched to model: ${model}`, false);
+        
+    } catch (error) {
+        console.error('Error switching model:', error);
+        appendMessage(`Failed to switch model: ${error.message}`, false);
+    }
+}
+
+// Event listener for model selection
+document.getElementById('model-select').addEventListener('change', (e) => {
+    const selectedModel = e.target.value;
+    if (selectedModel) {
+        switchModel(selectedModel);
+    }
+});
+
+// Initialize model selector when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    fetchModels();
+});
+
 let currentImageData = null;
 let currentMediaType = null;
 
@@ -294,6 +373,9 @@ window.addEventListener('load', async () => {
         
         // Reset token usage display
         updateTokenUsage(0, 200000);
+        
+        // Fetch models on page load
+        fetchModels();
     } catch (error) {
         console.error('Error resetting conversation:', error);
     }

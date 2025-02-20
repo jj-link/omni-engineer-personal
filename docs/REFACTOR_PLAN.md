@@ -22,6 +22,12 @@ Add CBORG support to the existing engine.py while maintaining all current functi
 - [x] Add file management:
   - [x] Upload/download support
   - [x] Project context management
+- [x] Add in-chat model switching:
+  - [x] Add model selector dropdown in chat UI
+  - [x] Update model selection endpoint for active sessions
+  - [x] Add model switch confirmation dialog
+  - [x] Handle conversation context during model switch
+  - [x] Add tests for model switching functionality
 - [ ] Implement real-time updates:
   - [ ] Streaming responses
   - [ ] Progress indicators
@@ -45,7 +51,8 @@ Add CBORG support to the existing engine.py while maintaining all current functi
       }
   }
   ```
-- [ ] Add environment variable support for CBORG API key
+- [x] Add environment variable support for CBORG API key
+- [x] Add dynamic model list from CBORG API
 
 ## Phase 3: CBORG Integration
 - [ ] Add provider selection via CLI arguments

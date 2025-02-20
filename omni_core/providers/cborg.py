@@ -17,7 +17,20 @@ async def list_models() -> List[Dict[str, str]]:
         provider="cborg",
         headers={"Authorization": f"Bearer {api_key}"}
     )
-    return response["models"]
+    
+    # The response has a 'data' field containing the list of models
+    models = response.get('data', [])
+    
+    print("\nAvailable CBORG Models:")
+    print("----------------------")
+    for model in models:
+        print(f"ID: {model.get('id', 'N/A')}")
+        print(f"Object Type: {model.get('object', 'N/A')}")
+        print(f"Created: {model.get('created', 'N/A')}")
+        print(f"Owned By: {model.get('owned_by', 'N/A')}")
+        print("----------------------")
+    
+    return models
 
 async def chat_completion(
     messages: List[Dict[str, str]],

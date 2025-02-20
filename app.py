@@ -9,6 +9,11 @@ from dotenv import load_dotenv
 # Load environment variables from .env
 load_dotenv()
 
+# Debug: Print environment variables
+print("Environment variables:")
+print(f"CBORG_API_KEY set: {'CBORG_API_KEY' in os.environ}")
+print(f"Current provider: {os.getenv('CBORG_API_KEY', 'not set')}")
+
 app = Flask(__name__, static_folder='static')
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
@@ -18,14 +23,64 @@ app.config['SECRET_KEY'] = os.urandom(24)  # For session management
 PROVIDER_CONFIG = {
     'cborg': {
         'base_url': 'https://api.cborg.lbl.gov',
-        'default_model': 'lbl/cborg-coder:chat',  # Using CBORG's dedicated coding model with chat endpoint
+        'default_model': 'lbl/cborg-coder:latest',
         'available_models': [
+            # OpenAI Models
+            'openai/gpt-35-turbo',
+            'openai/gpt-4o',
+            'openai/gpt-4o-mini',
+            'openai/o1',
+            'openai/o1-mini',
+            'openai/o3-mini',
+            'openai/chatgpt:latest',
+            
+            # LBL Models
+            'lbl/cborg-coder:latest',
             'lbl/cborg-coder:chat',
+            'lbl/cborg-coder-base:latest',
+            'lbl/cborg-chat:latest',
             'lbl/cborg-chat:chat',
-            'openai/gpt-4o:chat',
-            'openai/gpt-4o-mini:chat',
-            'openai/o1:chat',
-            'openai/o1-mini:chat'
+            'lbl/cborg-vision:latest',
+            'lbl/cborg-deepthought:latest',
+            'lbl/cborg-pdfbot',
+            'lbl/llama',
+            'lbl/llama-3',
+            'lbl/llama-vision',
+            'lbl/qwen-coder',
+            'lbl/qwen-vision',
+            'lbl/labgpt',
+            'lbl/failbot',
+            'lbl/nomic-embed-text',
+            'lbl/deepseek-r1:llama-70b',
+            
+            # Anthropic Models
+            'anthropic/claude-haiku:latest',
+            'anthropic/claude-haiku',
+            'anthropic/claude:latest',
+            'anthropic/claude-sonnet',
+            'anthropic/claude-sonnet:v1',
+            'anthropic/claude-opus',
+            
+            # Google Models
+            'google/gemini-pro',
+            'google/gemini-flash',
+            'google/gemini:latest',
+            
+            # AWS Models
+            'aws/mistral-large',
+            'aws/llama-3.1-405b',
+            'aws/llama-3.1-8b',
+            'aws/llama-3.1-70b',
+            'aws/command-r-v1',
+            'aws/command-r-plus-v1',
+            
+            # Azure Models
+            'azure/phi-3-medium-4k',
+            'azure/phi-3.5-moe',
+            'azure/deepseek-r1',
+            
+            # Other Models
+            'wolfram/alpha'
         ],
         'requires_key': True,
         'api_key_env': 'CBORG_API_KEY',
@@ -38,6 +93,7 @@ PROVIDER_CONFIG = {
     'ollama': {
         'base_url': 'http://localhost:11434',
         'default_model': 'codellama',
+        'available_models': ['codellama', 'llama2', 'mistral'],
         'requires_key': False,
         'parameters': {
             'temperature': 0.7,
@@ -47,9 +103,6 @@ PROVIDER_CONFIG = {
     }
 }
 
-# Ensure upload directory exists
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-
 # Initialize with CBORG if API key exists, otherwise fallback to ollama
 default_provider = 'cborg' if os.getenv('CBORG_API_KEY') else 'ollama'
 assistant = Assistant(provider=default_provider)
@@ -58,6 +111,9 @@ current_parameters = PROVIDER_CONFIG[default_provider]['parameters'].copy()
 
 @app.route('/')
 def home():
+    # Set initial provider in session
+    if 'current_provider' not in session:
+        session['current_provider'] = default_provider
     return render_template('index.html')
 
 @app.route('/providers', methods=['GET'])
@@ -103,30 +159,109 @@ def select_provider():
 
 @app.route('/models', methods=['GET'])
 def get_models():
-    """Get available models for current provider"""
-    provider = session.get('current_provider', 'ollama')
+    """Get available models for the current provider"""
+    provider = session.get('current_provider', default_provider)
     
-    if provider == 'cborg':
-        return jsonify({
-            'models': PROVIDER_CONFIG['cborg']['available_models'],
-            'default_model': PROVIDER_CONFIG['cborg']['default_model']
-        })
-    elif provider == 'ollama':
-        # For Ollama, we could make an API call to get models, but for now just return default
-        return jsonify({
-            'models': ['codellama'],
-            'default_model': PROVIDER_CONFIG['ollama']['default_model']
-        })
+    if provider == 'ollama':
+        try:
+            # Try to get list of installed models from Ollama
+            import requests
+            response = requests.get('http://localhost:11434/api/tags')
+            if response.status_code == 200:
+                installed_models = [model['name'] for model in response.json()['models']]
+            else:
+                installed_models = ['codellama']  # Fallback to default
+                
+            models = [f"OLLAMA: {model}" for model in installed_models]
+            default_model = f"OLLAMA: {PROVIDER_CONFIG['ollama']['default_model']}"
+            
+        except Exception as e:
+            print(f"Error fetching Ollama models: {e}")
+            models = ["OLLAMA: codellama"]  # Fallback to default
+            default_model = "OLLAMA: codellama"
+            
+    elif provider == 'cborg':
+        # For CBORG, use the configured models
+        models = [f"CBORG: {model}" for model in PROVIDER_CONFIG['cborg']['available_models']]
+        default_model = f"CBORG: {PROVIDER_CONFIG['cborg']['default_model']}"
     else:
         return jsonify({
             'success': False,
-            'error': f'Invalid provider: {provider}'
+            'error': f'Unknown provider: {provider}'
         }), 400
+    
+    # Get current model with proper prefix
+    current_model = session.get('current_model')
+    if not current_model:
+        current_model = default_model
+    elif not (current_model.startswith('OLLAMA: ') or current_model.startswith('CBORG: ')):
+        current_model = f"{provider.upper()}: {current_model}"
+    
+    return jsonify({
+        'models': models,
+        'default_model': default_model,
+        'current_model': current_model,
+        'current_provider': provider
+    })
+
+@app.route('/switch_model', methods=['POST'])
+def switch_model():
+    """Switch to a different model"""
+    try:
+        data = request.get_json()
+        if not data or 'model' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'No model specified'
+            }), 400
+        
+        model = data['model']
+        provider = session.get('current_provider', default_provider)
+        
+        # Remove provider prefix for validation
+        if model.startswith('OLLAMA: '):
+            if provider != 'ollama':
+                return jsonify({
+                    'success': False,
+                    'error': 'Cannot use Ollama model with CBORG provider'
+                }), 400
+            actual_model = model.replace('OLLAMA: ', '')
+            # Update the assistant's model
+            assistant.model = actual_model
+        elif model.startswith('CBORG: '):
+            if provider != 'cborg':
+                return jsonify({
+                    'success': False,
+                    'error': 'Cannot use CBORG model with Ollama provider'
+                }), 400
+            actual_model = model.replace('CBORG: ', '')
+            # Don't add :chat here - it will be added in the chat endpoint
+            assistant.model = actual_model
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'Invalid model format. Must start with OLLAMA: or CBORG:'
+            }), 400
+        
+        # Store the selected model in the session
+        session['current_model'] = model
+        
+        return jsonify({
+            'success': True,
+            'model': model,
+            'provider': provider
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @app.route('/params', methods=['GET'])
 def get_parameters():
     """Get current parameter configuration"""
-    provider = session.get('current_provider', 'ollama')
+    provider = session.get('current_provider', default_provider)
     params = session.get('current_parameters', PROVIDER_CONFIG[provider]['parameters'])
     return jsonify(params)
 
@@ -134,7 +269,7 @@ def get_parameters():
 def update_parameters():
     """Update parameter configuration"""
     data = request.json
-    provider = session.get('current_provider', 'ollama')
+    provider = session.get('current_provider', default_provider)
     
     try:
         # Validate parameters
@@ -171,74 +306,57 @@ def update_parameters():
             'error': str(e)
         }), 400
 
+@app.route('/debug/provider', methods=['GET'])
+def debug_provider():
+    """Debug endpoint to check provider status"""
+    return jsonify({
+        'current_provider': session.get('current_provider', 'not set'),
+        'default_provider': default_provider,
+        'available_providers': list(PROVIDER_CONFIG.keys())
+    })
+
 @app.route('/chat', methods=['POST'])
 def chat():
     data = request.json
-    message = data.get('message', '')
-    image_data = data.get('image')  # Get the base64 image data
-    
-    # Prepare the message content
-    if image_data:
-        # Create a message with both text and image in correct order
-        message_content = [
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": "image/jpeg",  # We should detect this from the image
-                    "data": image_data.split(',')[1] if ',' in image_data else image_data  # Remove data URL prefix if present
-                }
-            }
-        ]
-        
-        # Only add text message if there is actual text
-        if message.strip():
-            message_content.append({
-                "type": "text",
-                "text": message
-            })
-    else:
-        # Text-only message
-        message_content = message
-    
+    if not data or 'message' not in data:
+        return jsonify({'error': 'No message provided'}), 400
+
+    message = data['message']
+    image_data = data.get('image_data')
+    media_type = data.get('media_type')
+
     try:
-        # Handle the chat message with the appropriate content
-        response = assistant.chat(message_content)
-        
-        # Get token usage from assistant
-        token_usage = {
-            'total_tokens': assistant.total_tokens_used,
-            'max_tokens': Config.MAX_CONVERSATION_TOKENS
-        }
-        
-        # Get the last used tool from the conversation history
-        tool_name = None
-        if assistant.conversation_history:
-            for msg in reversed(assistant.conversation_history):
-                if msg.get('role') == 'assistant' and msg.get('content'):
-                    content = msg['content']
-                    if isinstance(content, list):
-                        for block in content:
-                            if isinstance(block, dict) and block.get('type') == 'tool_use':
-                                tool_name = block.get('name')
-                                break
-                    if tool_name:
-                        break
-        
-        return jsonify({
-            'response': response,
-            'thinking': False,
-            'tool_name': tool_name,
-            'token_usage': token_usage
-        })
-        
+        # Get current model and remove provider prefix
+        current_model = session.get('current_model')
+        if current_model:
+            if current_model.startswith('CBORG: '):
+                model_name = current_model.replace('CBORG: ', '')
+                # Model name already includes :chat suffix
+            elif current_model.startswith('OLLAMA: '):
+                model_name = current_model.replace('OLLAMA: ', '')
+            else:
+                model_name = current_model
+        else:
+            # Use default model based on provider
+            provider = session.get('current_provider', default_provider)
+            if provider == 'cborg':
+                model_name = PROVIDER_CONFIG['cborg']['default_model']  # Already includes :chat
+            else:
+                model_name = PROVIDER_CONFIG['ollama']['default_model']
+
+        # Update the model in the Assistant
+        assistant.model = model_name
+
+        if image_data and media_type:
+            response = assistant.chat_with_image(message, image_data, media_type)
+        else:
+            response = assistant.chat(message)
+
+        return jsonify({'response': response})
+
     except Exception as e:
-        return jsonify({
-            'response': f"Error: {str(e)}",
-            'thinking': False,
-            'tool_name': None,
-            'token_usage': None
-        }), 200  # Return 200 even for errors to handle them gracefully in frontend
+        print(f"Error in chat: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/upload', methods=['POST'])
 def upload_file():

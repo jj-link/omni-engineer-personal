@@ -270,54 +270,126 @@ def test_provider_selection(client):
         raise
 
 def test_model_selection(client):
-    """Test model selection for each provider"""
-    # Test with CBORG provider
-    with client.session_transaction() as sess:
-        sess['current_provider'] = 'cborg'
+    """Test model selection functionality"""
+    print("\n=== Testing model selection ===")
+    
+    # Test getting models for CBORG provider
+    with client.session_transaction() as session:
+        session['current_provider'] = 'cborg'
     
     response = client.get('/models')
-    try:
-        assert response.status_code == 200, f"Expected status 200, got {response.status_code}"
-        data = json.loads(response.data)
-        assert 'models' in data, "Missing models in response"
-        assert 'default_model' in data, "Missing default_model in response"
-        assert isinstance(data['models'], list), f"Expected models to be list, got {type(data.get('models'))}"
-        assert 'lbl/cborg-coder:chat' in data['models'], "Missing lbl/cborg-coder:chat in models"
-        assert data['default_model'] == 'lbl/cborg-coder:chat', f"Expected default_model 'lbl/cborg-coder:chat', got {data.get('default_model')}"
-    except AssertionError as e:
-        print(f"\nAssertion failed in test_model_selection: {str(e)}")
-        raise
+    print(f"Response status: {response.status_code}")
+    print(f"Response data: {response.data}")
+    data = json.loads(response.data)
+    print(f"Parsed data: {data}")
+    
+    # Test each assertion separately
+    if response.status_code != 200:
+        pytest.fail(f"Expected status 200, got {response.status_code}")
+    
+    if 'models' not in data:
+        pytest.fail("Missing models in response")
+        
+    if not isinstance(data['models'], list):
+        pytest.fail(f"Expected models to be list, got {type(data.get('models'))}")
+        
+    if 'default_model' not in data:
+        pytest.fail("Missing default_model in response")
+        
+    if data['default_model'] not in data['models']:
+        pytest.fail(f"Default model {data['default_model']} not in available models")
+    
+    # Test getting models for Ollama provider
+    with client.session_transaction() as session:
+        session['current_provider'] = 'ollama'
+    
+    response = client.get('/models')
+    data = json.loads(response.data)
+    
+    if response.status_code != 200:
+        pytest.fail(f"Expected status 200, got {response.status_code}")
+    
+    if 'models' not in data:
+        pytest.fail("Missing models in response")
+        
+    if not isinstance(data['models'], list):
+        pytest.fail(f"Expected models to be list, got {type(data.get('models'))}")
+        
+    if 'default_model' not in data:
+        pytest.fail("Missing default_model in response")
+        
+    if data['default_model'] not in data['models']:
+        pytest.fail(f"Default model {data['default_model']} not in available models")
 
-    # Test with Ollama provider
-    with client.session_transaction() as sess:
-        sess['current_provider'] = 'ollama'
+def test_model_switching(client):
+    """Test model switching functionality"""
+    print("\n=== Testing model switching ===")
     
-    response = client.get('/models')
-    try:
-        assert response.status_code == 200, f"Expected status 200, got {response.status_code}"
-        data = json.loads(response.data)
-        assert 'models' in data, "Missing models in response"
-        assert 'default_model' in data, "Missing default_model in response"
-        assert isinstance(data['models'], list), f"Expected models to be list, got {type(data.get('models'))}"
-        assert 'codellama' in data['models'], "Missing codellama in models"
-        assert data['default_model'] == 'codellama', f"Expected default_model 'codellama', got {data.get('default_model')}"
-    except AssertionError as e:
-        print(f"\nAssertion failed in test_model_selection: {str(e)}")
-        raise
-
-    # Test with invalid provider
-    with client.session_transaction() as sess:
-        sess['current_provider'] = 'invalid'
+    # Test switching model for CBORG provider
+    with client.session_transaction() as session:
+        session['current_provider'] = 'cborg'
+        session['current_model'] = 'lbl/cborg-coder:chat'
     
-    response = client.get('/models')
-    try:
-        assert response.status_code == 400, f"Expected status 400, got {response.status_code}"
-        data = json.loads(response.data)
-        assert data['success'] is False, f"Expected success False, got {data.get('success')}"
-        assert 'error' in data, "Missing error in response"
-    except AssertionError as e:
-        print(f"\nAssertion failed in test_model_selection: {str(e)}")
-        raise
+    response = client.post('/switch_model', json={'model': 'lbl/cborg-coder:chat'})
+    print(f"Response status: {response.status_code}")
+    print(f"Response data: {response.data}")
+    data = json.loads(response.data)
+    print(f"Parsed data: {data}")
+    
+    # Test each assertion separately
+    if response.status_code != 200:
+        pytest.fail(f"Expected status 200, got {response.status_code}")
+    
+    if 'success' not in data:
+        pytest.fail("Missing success in response")
+        
+    if data['success'] is not True:
+        pytest.fail(f"Expected success True, got {data.get('success')}")
+        
+    if 'model' not in data:
+        pytest.fail("Missing model in response")
+        
+    if data['model'] != 'lbl/cborg-coder:chat':
+        pytest.fail(f"Expected model 'lbl/cborg-coder:chat', got {data.get('model')}")
+    
+    # Test switching model for Ollama provider
+    with client.session_transaction() as session:
+        session['current_provider'] = 'ollama'
+        session['current_model'] = 'codellama'
+    
+    response = client.post('/switch_model', json={'model': 'codellama'})
+    data = json.loads(response.data)
+    
+    if response.status_code != 200:
+        pytest.fail(f"Expected status 200, got {response.status_code}")
+    
+    if 'success' not in data:
+        pytest.fail("Missing success in response")
+        
+    if data['success'] is not True:
+        pytest.fail(f"Expected success True, got {data.get('success')}")
+        
+    if 'model' not in data:
+        pytest.fail("Missing model in response")
+        
+    if data['model'] != 'codellama':
+        pytest.fail(f"Expected model 'codellama', got {data.get('model')}")
+    
+    # Test switching to invalid model
+    response = client.post('/switch_model', json={'model': 'invalid'})
+    data = json.loads(response.data)
+    
+    if response.status_code != 400:
+        pytest.fail(f"Expected status 400, got {response.status_code}")
+    
+    if 'success' not in data:
+        pytest.fail("Missing success in response")
+        
+    if data['success'] is not False:
+        pytest.fail(f"Expected success False, got {data.get('success')}")
+        
+    if 'error' not in data:
+        pytest.fail("Missing error in response")
 
 def test_parameter_configuration(client):
     """Test parameter configuration endpoints"""
