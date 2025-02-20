@@ -1,154 +1,75 @@
 # Product Requirements Document: Multi-Model Support for Omni Engineer
 
 ## Overview
-Enhance the existing Ollama-based engineer by adding CBORG support while preserving and improving current functionality through incremental refactoring.
+Add CBORG support to the existing Ollama-based engineer while preserving all current functionality. This is a focused enhancement to enable the use of both local Ollama models and CBORG's cloud models.
 
 ## Current State vs Target State
 
 ### Current State (engine.py)
-- Fully functional Ollama integration
-- Rich console output with syntax highlighting
-- Code editing and diffing capabilities
-- Project context management
-- File system operations
-- Conversation history
-- Asynchronous operation
+- Fully functional Ollama integration with features:
+  - Rich console output with syntax highlighting
+  - Code editing and diffing capabilities
+  - Project context management
+  - File system operations
+  - Conversation history
+  - Asynchronous operation
 
 ### Target State
-- Support for both CBORG and Ollama models
-- Modular, well-tested codebase
-- Preserved existing functionality:
-  - Rich console interface
-  - Code editing capabilities
-  - Project management
-  - File operations
-- Enhanced features:
-  - Flexible model selection
-  - Configurable parameters
-  - Comprehensive test coverage
-  - Improved error handling
+Same as current state, plus:
+- Support for CBORG models alongside Ollama
+- Ability to switch between providers via CLI arguments
+- Proper error handling for both providers
+- Environment variable support for API keys
 
 ## Technical Requirements
 
 ### 1. Model Provider Support
 ```python
-PROVIDERS = {
+PROVIDER_CONFIG = {
     'cborg': {
-        'env_key': 'CBORG_API_KEY',
         'base_url': 'https://api.cborg.lbl.gov',
         'default_model': 'lbl/cborg-coder:latest',
-        'requires_key': True
+        'requires_key': True,
+        'parameters': {
+            'temperature': 0.7,
+            'top_p': 0.9,
+            'seed': None
+        }
     },
     'ollama': {
-        'env_key': None,
         'base_url': 'http://localhost:11434',
         'default_model': 'codellama',
-        'requires_key': False
+        'requires_key': False,
+        'parameters': {
+            'temperature': 0.7,
+            'top_p': 0.9,
+            'seed': None
+        }
     }
 }
 ```
 
-### 2. Preserved Core Features
-- Asynchronous operation
-- Rich console output
-- Code editing and diffing
-- Project context management
-- File system operations
-- Conversation history
-- Progress tracking
+### 2. CLI Arguments
+- `--provider`: Choose between 'ollama' and 'cborg'
+- `--model`: Specify model name
+- `--temperature`: Set temperature (0-1)
+- `--top-p`: Set top-p sampling (0-1)
+- `--seed`: Set random seed for reproducibility
 
-### 3. Enhanced Features
-- Model provider selection
-- Parameter configuration:
-  - Temperature
-  - Top-p sampling
-  - Random seed
-- Improved error handling
-- Comprehensive testing
-- Provider-specific optimizations
+### 3. Error Handling
+- Connection errors
+- API authentication
+- Model availability
+- Response validation
+- Automatic retries for transient errors
 
-### 4. Command Line Interface
-```python
-parser.add_argument('--api', choices=['cborg', 'ollama'], default='ollama')
-parser.add_argument('--model', help='Model name')
-parser.add_argument('--temperature', type=float, default=0.7)
-parser.add_argument('--top-p', type=float, default=1.0)
-parser.add_argument('--seed', type=int)
-parser.add_argument('--ollama-url', default='http://localhost:11434')
-```
-
-### 5. Command Line Argument Handling
-```bash
-# Example CLI usage
-omni-engineer --provider ollama --model codellama --temperature 0.7 --top-p 0.9
-omni-engineer --provider cborg --model lbl/cborg-coder:latest
-```
-
-Required Arguments:
-- `--provider`: Model provider (ollama/cborg)
-- `--model`: Model name/path
-
-Optional Arguments:
-- `--temperature`: Sampling temperature (0.0-1.0)
-- `--top-p`: Nucleus sampling parameter (0.0-1.0)
-- `--seed`: Random seed for reproducibility
-- `--max-tokens`: Maximum tokens in response
-- `--system-prompt`: Custom system prompt
-- `--auto-mode`: Start in auto mode with specified iterations
-
-## Implementation Strategy
-
-### Phase 1: Test Coverage (Week 1)
-1. Create comprehensive tests for existing functionality
-2. Document current behavior
-3. Establish baseline performance metrics
-
-### Phase 2: Modular Refactoring (Week 1-2)
-1. Extract core components into modules
-2. Maintain existing functionality
-3. Add unit tests for each module
-
-### Phase 3: CBORG Integration (Week 2)
-1. Add CBORG client implementation
-2. Create provider selection logic
-3. Test multi-provider support
-
-### Phase 4: Enhancement (Week 2-3)
-1. Improve error handling
-2. Add parameter controls
-3. Optimize performance
-
-### Phase 5: Testing and Documentation (Week 3)
-1. Complete test coverage
-2. Update documentation
-3. Create usage examples
+### 4. Testing Requirements
+- Unit tests for provider selection
+- Integration tests for both providers
+- Error handling test cases
 
 ## Success Criteria
-1. All existing functionality preserved
-2. Seamless provider switching
-3. Comprehensive test coverage (>90%)
-4. No regression in performance
-5. Clear error messages
-6. Updated documentation
-
-## Usage Examples
-
-### Basic Usage
-```bash
-# Use existing Ollama functionality (default)
-python -m omni_core
-
-# Use CBORG
-python -m omni_core --api cborg
-
-# Custom model and parameters
-python -m omni_core --api cborg --model lbl/cborg-coder:latest --temperature 0.8
-```
-
-### Advanced Usage
-```bash
-# Code editing with specific provider
-python -m omni_core --api cborg edit "Add error handling to main()"
-
-# Project-wide changes
-python -m omni_core refactor "Update docstrings"
+1. Can switch between Ollama and CBORG models using CLI arguments
+2. All existing functionality works with both providers
+3. Proper error handling and recovery
+4. No regression in current features

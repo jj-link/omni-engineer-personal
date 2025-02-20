@@ -1,104 +1,55 @@
-# Refactor Plan: Adding Multi-Model Support
+# Implementation Plan: Adding CBORG Support to engine.py
 
-> ⚠️ **IMPORTANT**: This plan must be updated to mark completed items BEFORE committing any code changes. This ensures we maintain an accurate record of progress.
+## Overview
+Add CBORG support to the existing engine.py while maintaining all current functionality. This is NOT a refactor - we are simply adding CBORG as an additional model provider.
 
-## Current Status
-- [x] Basic test infrastructure is set up
-- [x] Project structure renamed for multi-model support
-- [x] Basic error handling tests implemented
-- [x] Provider selection implemented
-- [x] Common parameters added
-
-## Phase 1: Provider Selection (HIGHEST PRIORITY)
-Goal: Enable switching between Ollama and CBORG at runtime
-
-### 1.1 Add Basic Provider Selection 
-- [x] Add --api argument to CLI:
-  ```python
-  parser.add_argument('--api', choices=['cborg', 'ollama'], default='ollama')
-  parser.add_argument('--model', help='Model name')
-  ```
-- [x] Add model selection logic in main()
-- [x] Add tests for provider selection
-
-### 1.2 Add Common Parameters 
-- [x] Add temperature control
-- [x] Add top-p sampling
-- [x] Add seed setting
-- [x] Add tests for parameter handling
-
-### 1.3 Add Provider Configuration 
-- [x] Add provider config structure:
+## Phase 1: Preparation
+- [ ] Revert recent refactoring changes
+- [ ] Commit reversion as clean starting point
+- [ ] Add CBORG configuration to engine.py:
   ```python
   PROVIDER_CONFIG = {
       'cborg': {
           'base_url': 'https://api.cborg.lbl.gov',
           'default_model': 'lbl/cborg-coder:latest',
           'requires_key': True
-      },
-      'ollama': {
-          'base_url': 'http://localhost:11434',
-          'default_model': 'codellama',
-          'requires_key': False
       }
   }
   ```
-- [x] Add environment variable handling
-- [x] Add config validation
 
-## Phase 2: Error Handling (HIGH PRIORITY)
-Goal: Ensure robust error handling before adding CBORG
+## Phase 2: CBORG Integration
+- [ ] Add CBORG chat completion function
+- [ ] Add provider selection via CLI arguments
+- [ ] Add environment variable support for CBORG API key
+- [ ] Ensure all existing features work with CBORG:
+  - [ ] Rich console output
+  - [ ] Code editing
+  - [ ] Project context
+  - [ ] File operations
+  - [ ] Conversation history
 
-### 2.1 Critical Error Handling 
-- [x] Add connection error handling
-- [x] Add API key validation
-- [x] Add model availability checks
-- [x] Add tests for error scenarios
+## Phase 3: Error Handling
+- [ ] Add CBORG-specific error handling:
+  - [ ] Connection errors
+  - [ ] API authentication
+  - [ ] Model availability
+  - [ ] Response validation
+  - [ ] Automatic retries
 
-### 2.2 Response Error Handling 
-- [x] Add response validation
-- [x] Add response format checking
-- [x] Add automatic retries for transient errors
-- [x] Add error logging
-
-### 2.3 CLI Argument Handling
-- [x] Add argparse configuration
-- [x] Implement provider selection via CLI
-- [x] Implement model selection via CLI
-- [x] Add parameter configuration (temperature, top-p, etc.)
-- [x] Add tests for CLI argument handling
-- [ ] Update documentation with CLI usage
-
-## Phase 3: CBORG Integration
-Goal: Add CBORG support now that foundation is ready
-
-### 3.1 Add CBORG Chat Function
-- [x] Create chat_with_cborg parallel to chat_with_ollama
-- [x] Ensure consistent response format with Ollama
-- [x] Add streaming support
-- [x] Add tests for CBORG chat
-
-### 3.2 Provider-Specific Features
-- [x] Add Ollama-specific options:
-  - [x] Context window
-  - [x] Model file path
-- [x] Add CBORG-specific features:
-  - [x] OpenAI-compatible API format
-  - [x] Model availability checks
-  - [x] Token usage tracking
-  - [x] Error handling with detailed messages
+## Phase 4: Testing
+- [ ] Test CBORG integration
+- [ ] Verify all existing features work with both providers
+- [ ] Test error handling scenarios
+- [ ] Document any CBORG-specific behavior
 
 ## Success Criteria
-- [x] Switch between providers with single argument
-- [x] Clear error messages and recovery
-- [x] Common parameters work across providers
-- [x] Provider-specific features accessible
-- [x] No loss of existing features
-- [x] >90% test coverage
+1. Can switch between Ollama and CBORG using CLI arguments
+2. All existing functionality works with both providers
+3. Proper error handling for CBORG-specific issues
+4. No regression in current features
 
-## Dependencies
-- [x] aiohttp for CBORG API calls (Phase 3)
-- [x] python-dotenv for API keys (Phase 1)
-- [x] pytest for testing (All Phases)
-- [x] rich for console output (existing)
-- [x] ollama for Ollama support (existing)
+## Non-Goals
+- Major refactoring of existing code
+- Adding new features beyond CBORG support
+- Changing the current architecture
+- Supporting additional providers beyond Ollama and CBORG
