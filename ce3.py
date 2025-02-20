@@ -13,12 +13,17 @@ import os
 import json
 import sys
 import logging
+import requests
+from dotenv import load_dotenv
 
 from config import Config
 from tools.base import BaseTool
 from prompt_toolkit import prompt
 from prompt_toolkit.styles import Style
 from prompts.system_prompts import SystemPrompts
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging to only show ERROR level and above
 logging.basicConfig(
@@ -30,27 +35,182 @@ class Assistant:
     """
     The Assistant class manages:
     - Loading of tools from a specified directory.
-    - Interaction with the Anthropics API (message completion).
+    - Interaction with AI providers (Anthropic, CBORG, Ollama).
     - Handling user commands such as 'refresh' and 'reset'.
     - Token usage tracking and display.
     - Tool execution upon request from model responses.
     """
 
-    def __init__(self):
-        if not getattr(Config, 'ANTHROPIC_API_KEY', None):
-            raise ValueError("No ANTHROPIC_API_KEY found in environment variables")
-
-        # Initialize Anthropics client
-        self.client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
-
+    def __init__(self, provider='anthropic'):
+        self.provider = provider
         self.conversation_history: List[Dict[str, Any]] = []
         self.console = Console()
-
         self.thinking_enabled = getattr(Config, 'ENABLE_THINKING', False)
         self.temperature = getattr(Config, 'DEFAULT_TEMPERATURE', 0.7)
         self.total_tokens_used = 0
-
         self.tools = self._load_tools()
+        
+        # Initialize provider-specific settings
+        if provider == 'anthropic':
+            if not getattr(Config, 'ANTHROPIC_API_KEY', None):
+                raise ValueError("No ANTHROPIC_API_KEY found in environment variables")
+            self.client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
+        elif provider == 'cborg':
+            if not os.getenv('CBORG_API_KEY'):
+                raise ValueError("No CBORG_API_KEY found in environment variables")
+            self.api_key = os.getenv('CBORG_API_KEY')
+            self.base_url = 'https://api.cborg.lbl.gov'
+            self.model = 'lbl/cborg-coder:chat'  # Using CBORG's dedicated coding model with chat endpoint
+        elif provider == 'ollama':
+            self.base_url = 'http://localhost:11434'
+            self.model = 'codellama'
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
+
+    def _get_completion(self):
+        """
+        Get a completion from the selected provider.
+        Handles both text-only and multimodal messages.
+        """
+        try:
+            if self.provider == 'cborg':
+                # Prepare conversation history for CBORG
+                messages = []
+                for msg in self.conversation_history:
+                    content = msg['content']
+                    if isinstance(content, list):
+                        # Handle multimodal content
+                        text_parts = []
+                        for part in content:
+                            if part.get('type') == 'text':
+                                text_parts.append(part['text'])
+                        content = ' '.join(text_parts)
+                    messages.append({
+                        'role': msg['role'],
+                        'content': content
+                    })
+
+                # Make request to CBORG API
+                response = requests.post(
+                    f"{self.base_url}/v1/chat/completions",
+                    headers={
+                        'Authorization': f'Bearer {self.api_key}',
+                        'Content-Type': 'application/json'
+                    },
+                    json={
+                        'model': self.model,
+                        'messages': messages,
+                        'temperature': self.temperature,
+                        'stream': False
+                    }
+                )
+                
+                if response.status_code != 200:
+                    raise Exception(f"CBORG API error: {response.text}")
+                
+                result = response.json()
+                
+                # Add response to conversation history
+                assistant_message = result['choices'][0]['message']
+                self.conversation_history.append({
+                    'role': 'assistant',
+                    'content': assistant_message['content']
+                })
+                
+                # Track token usage
+                if 'usage' in result:
+                    self.total_tokens_used += result['usage']['total_tokens']
+                
+                return assistant_message['content']
+
+            elif self.provider == 'anthropic':
+                # Existing Anthropic implementation
+                response = self.client.messages.create(
+                    model=Config.MODEL,
+                    max_tokens=min(
+                        Config.MAX_TOKENS,
+                        Config.MAX_CONVERSATION_TOKENS - self.total_tokens_used
+                    ),
+                    temperature=self.temperature,
+                    tools=self.tools,
+                    messages=self.conversation_history,
+                    system=f"{SystemPrompts.DEFAULT}\n\n{SystemPrompts.TOOL_USAGE}"
+                )
+
+                # Update token usage based on response usage
+                if hasattr(response, 'usage') and response.usage:
+                    message_tokens = response.usage.input_tokens + response.usage.output_tokens
+                    self.total_tokens_used += message_tokens
+                    self._display_token_usage(response.usage)
+
+                if self.total_tokens_used >= Config.MAX_CONVERSATION_TOKENS:
+                    self.console.print("\n[bold red]Token limit reached! Please reset the conversation.[/bold red]")
+                    return "Token limit reached! Please type 'reset' to start a new conversation."
+
+                if response.stop_reason == "tool_use":
+                    self.console.print("\n[bold yellow]  Handling Tool Use...[/bold yellow]\n")
+
+                    tool_results = []
+                    if getattr(response, 'content', None) and isinstance(response.content, list):
+                        # Execute each tool in the response content
+                        for content_block in response.content:
+                            if content_block.type == "tool_use":
+                                result = self._execute_tool(content_block)
+                                
+                                # Handle structured data (like image blocks) vs text
+                                if isinstance(result, (list, dict)):
+                                    tool_results.append({
+                                        "type": "tool_result",
+                                        "tool_use_id": content_block.id,
+                                        "content": result  # Keep structured data intact
+                                    })
+                                else:
+                                    # Convert text results to proper content blocks
+                                    tool_results.append({
+                                        "type": "tool_result",
+                                        "tool_use_id": content_block.id,
+                                        "content": [{"type": "text", "text": str(result)}]
+                                    })
+
+                        # Append tool usage to conversation and continue
+                        self.conversation_history.append({
+                            "role": "assistant",
+                            "content": response.content
+                        })
+                        self.conversation_history.append({
+                            "role": "user",
+                            "content": tool_results
+                        })
+                        return self._get_completion()  # Recursive call to continue the conversation
+
+                    else:
+                        self.console.print("[red]No tool content received despite 'tool_use' stop reason.[/red]")
+                        return "Error: No tool content received"
+
+                # Final assistant response
+                if (getattr(response, 'content', None) and 
+                    isinstance(response.content, list) and 
+                    response.content):
+                    final_content = response.content[0].text
+                    self.conversation_history.append({
+                        "role": "assistant",
+                        "content": response.content
+                    })
+                    return final_content
+                else:
+                    self.console.print("[red]No content in final response.[/red]")
+                    return "No response content available."
+
+            elif self.provider == 'ollama':
+                # TODO: Implement Ollama support
+                raise NotImplementedError("Ollama support not yet implemented")
+            
+            else:
+                raise ValueError(f"Unsupported provider: {self.provider}")
+
+        except Exception as e:
+            logging.error(f"Error in _get_completion: {str(e)}")
+            return f"Error: {str(e)}"
 
     def _execute_uv_install(self, package_name: str) -> bool:
         """
@@ -328,92 +488,6 @@ class Assistant:
             self.console.print(f"[bold red]Warning: Only {remaining_tokens:,} tokens remaining![/bold red]")
 
         self.console.print("---")
-
-    def _get_completion(self):
-        """
-        Get a completion from the Anthropic API.
-        Handles both text-only and multimodal messages.
-        """
-        try:
-            response = self.client.messages.create(
-                model=Config.MODEL,
-                max_tokens=min(
-                    Config.MAX_TOKENS,
-                    Config.MAX_CONVERSATION_TOKENS - self.total_tokens_used
-                ),
-                temperature=self.temperature,
-                tools=self.tools,
-                messages=self.conversation_history,
-                system=f"{SystemPrompts.DEFAULT}\n\n{SystemPrompts.TOOL_USAGE}"
-            )
-
-            # Update token usage based on response usage
-            if hasattr(response, 'usage') and response.usage:
-                message_tokens = response.usage.input_tokens + response.usage.output_tokens
-                self.total_tokens_used += message_tokens
-                self._display_token_usage(response.usage)
-
-            if self.total_tokens_used >= Config.MAX_CONVERSATION_TOKENS:
-                self.console.print("\n[bold red]Token limit reached! Please reset the conversation.[/bold red]")
-                return "Token limit reached! Please type 'reset' to start a new conversation."
-
-            if response.stop_reason == "tool_use":
-                self.console.print("\n[bold yellow]  Handling Tool Use...[/bold yellow]\n")
-
-                tool_results = []
-                if getattr(response, 'content', None) and isinstance(response.content, list):
-                    # Execute each tool in the response content
-                    for content_block in response.content:
-                        if content_block.type == "tool_use":
-                            result = self._execute_tool(content_block)
-                            
-                            # Handle structured data (like image blocks) vs text
-                            if isinstance(result, (list, dict)):
-                                tool_results.append({
-                                    "type": "tool_result",
-                                    "tool_use_id": content_block.id,
-                                    "content": result  # Keep structured data intact
-                                })
-                            else:
-                                # Convert text results to proper content blocks
-                                tool_results.append({
-                                    "type": "tool_result",
-                                    "tool_use_id": content_block.id,
-                                    "content": [{"type": "text", "text": str(result)}]
-                                })
-
-                    # Append tool usage to conversation and continue
-                    self.conversation_history.append({
-                        "role": "assistant",
-                        "content": response.content
-                    })
-                    self.conversation_history.append({
-                        "role": "user",
-                        "content": tool_results
-                    })
-                    return self._get_completion()  # Recursive call to continue the conversation
-
-                else:
-                    self.console.print("[red]No tool content received despite 'tool_use' stop reason.[/red]")
-                    return "Error: No tool content received"
-
-            # Final assistant response
-            if (getattr(response, 'content', None) and 
-                isinstance(response.content, list) and 
-                response.content):
-                final_content = response.content[0].text
-                self.conversation_history.append({
-                    "role": "assistant",
-                    "content": response.content
-                })
-                return final_content
-            else:
-                self.console.print("[red]No content in final response.[/red]")
-                return "No response content available."
-
-        except Exception as e:
-            logging.error(f"Error in _get_completion: {str(e)}")
-            return f"Error: {str(e)}"
 
     def chat(self, user_input):
         """

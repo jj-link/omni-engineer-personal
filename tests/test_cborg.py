@@ -16,7 +16,7 @@ def mock_config(monkeypatch):
     
     config = Configuration()
     config.update_provider("cborg")
-    config.update_model("lbl/cborg-coder:latest")
+    config.update_model("lbl/cborg-coder:chat")
     return config
 
 @pytest.mark.asyncio
@@ -25,9 +25,9 @@ async def test_list_models(mock_config):
     mock_response = {
         "models": [
             {
-                "id": "lbl/cborg-coder:latest",
+                "id": "lbl/cborg-coder:chat",
                 "name": "CBORG Coder",
-                "version": "latest"
+                "version": "chat"
             }
         ]
     }
@@ -38,7 +38,7 @@ async def test_list_models(mock_config):
         models = await list_models()
         
         assert len(models) == 1
-        assert models[0]["id"] == "lbl/cborg-coder:latest"
+        assert models[0]["id"] == "lbl/cborg-coder:chat"
         assert models[0]["name"] == "CBORG Coder"
         
         mock_request.assert_called_once_with(
@@ -125,3 +125,26 @@ async def test_chat_completion_error_handling(mock_config):
         
         assert "API request failed" in str(exc.value)
         assert exc.value.details["status"] == 500
+
+def test_cborg_model_update():
+    """Test updating CBORG model"""
+    config = Configuration()
+    config.update_model("lbl/cborg-coder:chat")
+    assert config.model == "lbl/cborg-coder:chat"
+
+def test_cborg_model_list():
+    """Test listing available CBORG models"""
+    config = Configuration()
+    models = config.list_models()
+    
+    # Verify response structure
+    assert isinstance(models, list)
+    assert len(models) > 0
+    assert isinstance(models[0], dict)
+    assert models[0]["id"] == "lbl/cborg-coder:chat"
+    
+    # Verify model properties
+    for model in models:
+        assert "id" in model
+        assert "name" in model
+        assert "description" in model

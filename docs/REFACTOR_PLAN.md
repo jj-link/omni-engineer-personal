@@ -8,21 +8,20 @@ Add CBORG support to the existing engine.py while maintaining all current functi
   - [x] Provider dropdown (Ollama/CBORG)
   - [x] Model selection per provider
   - [x] Parameter configuration UI
-  Implementation details:
-  - Added /providers endpoint for listing available providers
-  - Added /select_provider endpoint for switching providers
-  - Added /models endpoint for model selection
-  - Added /params endpoint for parameter configuration
-  - Added comprehensive test coverage
-  - Using session management for state
-  - Added parameter validation (temperature, top-p)
-- [ ] Update chat interface:
-  - [ ] Code highlighting improvements
-  - [ ] Chat history display
-  - [ ] Error message handling
-- [ ] Add file management:
-  - [ ] Upload/download support
-  - [ ] Project context management
+  - [x] Add /providers endpoint for listing providers
+  - [x] Add /select_provider endpoint for switching
+  - [x] Add /models endpoint for model selection
+  - [x] Add /params endpoint for configuration
+  - [x] Add comprehensive test coverage
+  - [x] Implement session management for state
+  - [x] Add parameter validation (temperature, top-p)
+- [x] Update chat interface:
+  - [x] Code highlighting improvements
+  - [x] Chat history display
+  - [x] Error message handling
+- [x] Add file management:
+  - [x] Upload/download support
+  - [x] Project context management
 - [ ] Implement real-time updates:
   - [ ] Streaming responses
   - [ ] Progress indicators
@@ -30,6 +29,8 @@ Add CBORG support to the existing engine.py while maintaining all current functi
 
 ## Phase 2: CBORG Configuration
 - [x] Add CBORG configuration to engine.py:
+  - [x] PROVIDER_CONFIG dictionary
+  - [x] 'cborg' key with base_url, default_model, requires_key, and parameters
   ```python
   PROVIDER_CONFIG = {
       'cborg': {
@@ -65,7 +66,13 @@ Add CBORG support to the existing engine.py while maintaining all current functi
 - [ ] Ensure errors are properly displayed in web UI
 
 ## Phase 5: Testing
-- [ ] Test web interface components
+- [x] Test web interface components:
+  - [x] Basic chat functionality
+  - [x] Image upload and analysis
+  - [x] Error handling
+  - [x] Provider selection
+  - [x] Model selection
+  - [x] Parameter configuration
 - [ ] Test CBORG integration
 - [ ] Verify all existing features work with both providers
 - [ ] Test error handling scenarios

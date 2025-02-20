@@ -4,6 +4,10 @@ import os
 from werkzeug.utils import secure_filename
 import base64
 from config import Config
+from dotenv import load_dotenv
+
+# Load environment variables from .env
+load_dotenv()
 
 app = Flask(__name__, static_folder='static')
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -14,8 +18,17 @@ app.config['SECRET_KEY'] = os.urandom(24)  # For session management
 PROVIDER_CONFIG = {
     'cborg': {
         'base_url': 'https://api.cborg.lbl.gov',
-        'default_model': 'lbl/cborg-coder:latest',
+        'default_model': 'lbl/cborg-coder:chat',  # Using CBORG's dedicated coding model with chat endpoint
+        'available_models': [
+            'lbl/cborg-coder:chat',
+            'lbl/cborg-chat:chat',
+            'openai/gpt-4o:chat',
+            'openai/gpt-4o-mini:chat',
+            'openai/o1:chat',
+            'openai/o1-mini:chat'
+        ],
         'requires_key': True,
+        'api_key_env': 'CBORG_API_KEY',
         'parameters': {
             'temperature': 0.7,
             'top_p': 0.9,
@@ -37,10 +50,11 @@ PROVIDER_CONFIG = {
 # Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Initialize the assistant with default provider (ollama)
-assistant = Assistant()
-current_provider = 'ollama'
-current_parameters = PROVIDER_CONFIG['ollama']['parameters'].copy()
+# Initialize with CBORG if API key exists, otherwise fallback to ollama
+default_provider = 'cborg' if os.getenv('CBORG_API_KEY') else 'ollama'
+assistant = Assistant(provider=default_provider)
+current_provider = default_provider
+current_parameters = PROVIDER_CONFIG[default_provider]['parameters'].copy()
 
 @app.route('/')
 def home():
@@ -66,6 +80,15 @@ def select_provider():
             'error': f'Invalid provider. Must be one of: {", ".join(PROVIDER_CONFIG.keys())}'
         }), 400
     
+    # Check if provider requires API key
+    if PROVIDER_CONFIG[provider]['requires_key']:
+        api_key = os.getenv(PROVIDER_CONFIG[provider]['api_key_env'])
+        if not api_key:
+            return jsonify({
+                'success': False,
+                'error': f'Missing API key for {provider}. Please set {PROVIDER_CONFIG[provider]["api_key_env"]} environment variable.'
+            }), 400
+    
     # Store provider in session
     session['current_provider'] = provider
     
@@ -75,7 +98,7 @@ def select_provider():
     return jsonify({
         'success': True,
         'provider': provider,
-        'default_model': PROVIDER_CONFIG[provider]['default_model']
+        'parameters': session['current_parameters']
     })
 
 @app.route('/models', methods=['GET'])
@@ -83,15 +106,22 @@ def get_models():
     """Get available models for current provider"""
     provider = session.get('current_provider', 'ollama')
     
-    if provider == 'ollama':
-        models = ['codellama']  # For now, just return default model
-    else:  # cborg
-        models = ['lbl/cborg-coder:latest']  # For now, just return default model
-    
-    return jsonify({
-        'models': models,
-        'current_model': PROVIDER_CONFIG[provider]['default_model']
-    })
+    if provider == 'cborg':
+        return jsonify({
+            'models': PROVIDER_CONFIG['cborg']['available_models'],
+            'default_model': PROVIDER_CONFIG['cborg']['default_model']
+        })
+    elif provider == 'ollama':
+        # For Ollama, we could make an API call to get models, but for now just return default
+        return jsonify({
+            'models': ['codellama'],
+            'default_model': PROVIDER_CONFIG['ollama']['default_model']
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'error': f'Invalid provider: {provider}'
+        }), 400
 
 @app.route('/params', methods=['GET'])
 def get_parameters():
@@ -104,34 +134,42 @@ def get_parameters():
 def update_parameters():
     """Update parameter configuration"""
     data = request.json
+    provider = session.get('current_provider', 'ollama')
     
-    # Validate parameters
-    if 'temperature' in data:
-        temp = float(data['temperature'])
-        if temp < 0 or temp > 1:
-            return jsonify({
-                'success': False,
-                'error': 'Temperature must be between 0 and 1'
-            }), 400
-    
-    if 'top_p' in data:
-        top_p = float(data['top_p'])
-        if top_p < 0 or top_p > 1:
-            return jsonify({
-                'success': False,
-                'error': 'Top-p must be between 0 and 1'
-            }), 400
-    
-    # Update parameters in session
-    current_params = session.get('current_parameters', 
-                               PROVIDER_CONFIG[session.get('current_provider', 'ollama')]['parameters'])
-    current_params.update(data)
-    session['current_parameters'] = current_params
-    
-    return jsonify({
-        'success': True,
-        'parameters': current_params
-    })
+    try:
+        # Validate parameters
+        if 'temperature' in data:
+            temp = float(data['temperature'])
+            if temp < 0 or temp > 1:
+                raise ValueError('Temperature must be between 0 and 1')
+        
+        if 'top_p' in data:
+            top_p = float(data['top_p'])
+            if top_p < 0 or top_p > 1:
+                raise ValueError('Top-p must be between 0 and 1')
+        
+        if 'seed' in data and data['seed'] is not None:
+            try:
+                data['seed'] = int(data['seed'])
+            except (ValueError, TypeError):
+                raise ValueError('Seed must be an integer or None')
+        
+        # Update parameters in session
+        current_params = session.get('current_parameters', 
+                                 PROVIDER_CONFIG[provider]['parameters'])
+        current_params.update(data)
+        session['current_parameters'] = current_params
+        
+        return jsonify({
+            'success': True,
+            'parameters': current_params
+        })
+        
+    except ValueError as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 400
 
 @app.route('/chat', methods=['POST'])
 def chat():

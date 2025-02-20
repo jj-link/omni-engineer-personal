@@ -23,7 +23,7 @@ import argparse
 PROVIDER_CONFIG = {
     'cborg': {
         'base_url': 'https://api.cborg.lbl.gov',
-        'default_model': 'lbl/cborg-coder:latest',
+        'default_model': 'lbl/cborg-coder:chat',
         'requires_key': True,
         'parameters': {
             'temperature': 0.7,
@@ -1122,9 +1122,45 @@ async def main():
 
 async def chat_with_cborg(user_input, image_path=None, current_iteration=None, max_iterations=None):
     """
-    Chat with CBORG API (stub for now - will be implemented in Phase 3)
+    Chat with CBORG API using their chat completions endpoint
     """
-    raise NotImplementedError("CBORG support will be added in Phase 3")
+    try:
+        # Get API key from environment
+        api_key = os.getenv('CBORG_API_KEY')
+        if not api_key:
+            raise ValueError("CBORG_API_KEY not found in environment variables")
+
+        # Prepare the messages
+        messages = [{"role": "user", "content": user_input}]
+
+        # Make request to CBORG API
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{PROVIDER_CONFIG['cborg']['base_url']}/v1/chat/completions",
+                headers={
+                    'Authorization': f'Bearer {api_key}',
+                    'Content-Type': 'application/json'
+                },
+                json={
+                    'model': PROVIDER_CONFIG['cborg']['default_model'],
+                    'messages': messages,
+                    'temperature': PROVIDER_CONFIG['cborg']['parameters']['temperature'],
+                    'stream': False
+                }
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise Exception(f"CBORG API error: {error_text}")
+                
+                result = await response.json()
+                
+                # Extract the response
+                assistant_message = result['choices'][0]['message']['content']
+                return assistant_message
+
+    except Exception as e:
+        logging.error(f"Error in chat_with_cborg: {str(e)}")
+        return f"Error: {str(e)}"
 
 if __name__ == "__main__":
     asyncio.run(main())
