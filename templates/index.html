@@ -22,88 +22,93 @@
     </script>
 </head>
 <body class="bg-gray-50">
-    <div class="chat-container">
-        <!-- Messages area -->
-        <div class="messages-container" id="chat-messages">
-            <!-- Initial message -->
-            <div class="message-wrapper initial-message">
-                <div class="flex items-start space-x-4">
-                    <div class="w-8 h-8 rounded-full ai-avatar flex items-center justify-center text-white font-bold text-xs">
-                        CE
-                    </div>
-                    <div class="flex-1">
-                        <div class="prose prose-slate max-w-none">
-                            <p>Welcome to Claude Engineer v3! I'm here to help with programming and development tasks. I can create custom tools on demand to help with any task you need - just ask!</p>
-                            
-                            <p>Available commands:</p>
-                            <p>
-                                <span class="command-code">refresh</span> - Reload available tools<br>
-                                <span class="command-code">reset</span> - Clear conversation history<br>
-                                <span class="command-code">quit</span> - Exit the conversation
-                            </p>
-                            
-                            <p>How can I assist you today?</p>
-                        </div>
-                    </div>
-                </div>
+    <div class="flex h-screen">
+        <!-- Left sidebar -->
+        <div class="w-64 bg-white border-r border-gray-200 flex flex-col">
+            <div class="p-4 border-b border-gray-200">
+                <h2 class="text-lg font-medium text-gray-900">Models</h2>
+                <div class="mt-2" id="model-selector"></div>
             </div>
         </div>
 
-        <!-- Input area -->
-        <div class="input-container">
-            <div class="max-w-3xl mx-auto px-4">
-                <!-- Model selector -->
-                <div class="mb-4 flex items-center justify-between">
-                    <div class="flex items-center space-x-3">
-                        <label class="text-sm font-medium text-gray-700">Model:</label>
-                        <div id="model-selector"></div>
-                    </div>
-                    
-                    <!-- Image preview -->
-                    <div id="image-preview" class="hidden">
-                        <div class="relative inline-block">
-                            <img id="preview-image" class="h-12 w-12 object-cover rounded" alt="Preview">
-                            <button type="button" id="remove-image" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-sm">×</button>
+        <!-- Main content -->
+        <div class="flex-1 flex flex-col">
+            <div class="chat-container flex-1 flex flex-col">
+                <!-- Messages area -->
+                <div class="messages-container flex-1 overflow-y-auto" id="chat-messages">
+                    <!-- Initial message -->
+                    <div class="message-wrapper initial-message">
+                        <div class="flex items-start space-x-4">
+                            <div class="w-8 h-8 rounded-full ai-avatar flex items-center justify-center text-white font-bold text-xs">
+                                CE
+                            </div>
+                            <div class="flex-1">
+                                <div class="prose prose-slate max-w-none">
+                                    <p>Welcome to Claude Engineer v3! I'm here to help with programming and development tasks. I can create custom tools on demand to help with any task you need - just ask!</p>
+                                    
+                                    <p>Available commands:</p>
+                                    <p>
+                                        <span class="command-code">refresh</span> - Reload available tools<br>
+                                        <span class="command-code">reset</span> - Clear conversation history<br>
+                                        <span class="command-code">quit</span> - Exit the conversation
+                                    </p>
+                                    
+                                    <p>How can I assist you today?</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Chat form -->
-                <form id="chat-form" class="relative">
-                    <div class="mb-2 flex items-center justify-between text-sm text-gray-600">
-                        <span id="token-display">0 / 200,000</span>
-                        <div class="w-48 h-2 bg-gray-200 rounded-full overflow-hidden">
-                            <div id="token-progress" class="h-full bg-green-500 transition-all duration-300" style="width: 0%"></div>
+                <!-- Input area -->
+                <div class="input-container">
+                    <div class="max-w-3xl mx-auto px-4">
+                        <!-- Image preview -->
+                        <div id="image-preview" class="hidden">
+                            <div class="relative inline-block">
+                                <img id="preview-image" class="h-12 w-12 object-cover rounded" alt="Preview">
+                                <button type="button" id="remove-image" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-sm">×</button>
+                            </div>
                         </div>
+
+                        <!-- Chat form -->
+                        <form id="chat-form" class="relative">
+                            <div class="mb-2 flex items-center justify-between text-sm text-gray-600">
+                                <span id="token-display">0 / 200,000</span>
+                                <div class="w-48 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                    <div id="token-progress" class="h-full bg-green-500 transition-all duration-300" style="width: 0%"></div>
+                                </div>
+                            </div>
+                            <div class="flex items-start space-x-4">
+                                <div class="flex-1">
+                                    <textarea
+                                        id="message-input"
+                                        name="message"
+                                        rows="1"
+                                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm resize-none"
+                                        placeholder="Type your message..."
+                                    ></textarea>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <button
+                                        type="submit"
+                                        class="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                                    >
+                                        Send
+                                    </button>
+                                    <button
+                                        id="upload-btn"
+                                        type="button"
+                                        class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                                    >
+                                        Upload
+                                    </button>
+                                    <input type="file" id="file-input" class="hidden" accept="image/*">
+                                </div>
+                            </div>
+                        </form>
                     </div>
-                    <div class="flex items-start space-x-4">
-                        <div class="flex-1">
-                            <textarea
-                                id="message-input"
-                                name="message"
-                                rows="1"
-                                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm resize-none"
-                                placeholder="Type your message..."
-                            ></textarea>
-                        </div>
-                        <div class="flex items-center space-x-2">
-                            <button
-                                type="submit"
-                                class="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                            >
-                                Send
-                            </button>
-                            <button
-                                id="upload-btn"
-                                type="button"
-                                class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                            >
-                                Upload
-                            </button>
-                            <input type="file" id="file-input" class="hidden" accept="image/*">
-                        </div>
-                    </div>
-                </form>
+                </div>
             </div>
         </div>
     </div>
