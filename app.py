@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, url_for
+from flask import Flask, render_template, request, jsonify, url_for, session
 from ce3 import Assistant
 import os
 from werkzeug.utils import secure_filename
@@ -8,16 +8,130 @@ from config import Config
 app = Flask(__name__, static_folder='static')
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+app.config['SECRET_KEY'] = os.urandom(24)  # For session management
+
+# Provider configuration
+PROVIDER_CONFIG = {
+    'cborg': {
+        'base_url': 'https://api.cborg.lbl.gov',
+        'default_model': 'lbl/cborg-coder:latest',
+        'requires_key': True,
+        'parameters': {
+            'temperature': 0.7,
+            'top_p': 0.9,
+            'seed': None
+        }
+    },
+    'ollama': {
+        'base_url': 'http://localhost:11434',
+        'default_model': 'codellama',
+        'requires_key': False,
+        'parameters': {
+            'temperature': 0.7,
+            'top_p': 0.9,
+            'seed': None
+        }
+    }
+}
 
 # Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Initialize the assistant
+# Initialize the assistant with default provider (ollama)
 assistant = Assistant()
+current_provider = 'ollama'
+current_parameters = PROVIDER_CONFIG['ollama']['parameters'].copy()
 
 @app.route('/')
 def home():
     return render_template('index.html')
+
+@app.route('/providers', methods=['GET'])
+def get_providers():
+    """Get available providers"""
+    return jsonify({
+        'providers': list(PROVIDER_CONFIG.keys()),
+        'current_provider': session.get('current_provider', 'ollama')
+    })
+
+@app.route('/select_provider', methods=['POST'])
+def select_provider():
+    """Select a provider"""
+    data = request.json
+    provider = data.get('provider')
+    
+    if provider not in PROVIDER_CONFIG:
+        return jsonify({
+            'success': False,
+            'error': f'Invalid provider. Must be one of: {", ".join(PROVIDER_CONFIG.keys())}'
+        }), 400
+    
+    # Store provider in session
+    session['current_provider'] = provider
+    
+    # Reset parameters to provider defaults
+    session['current_parameters'] = PROVIDER_CONFIG[provider]['parameters'].copy()
+    
+    return jsonify({
+        'success': True,
+        'provider': provider,
+        'default_model': PROVIDER_CONFIG[provider]['default_model']
+    })
+
+@app.route('/models', methods=['GET'])
+def get_models():
+    """Get available models for current provider"""
+    provider = session.get('current_provider', 'ollama')
+    
+    if provider == 'ollama':
+        models = ['codellama']  # For now, just return default model
+    else:  # cborg
+        models = ['lbl/cborg-coder:latest']  # For now, just return default model
+    
+    return jsonify({
+        'models': models,
+        'current_model': PROVIDER_CONFIG[provider]['default_model']
+    })
+
+@app.route('/params', methods=['GET'])
+def get_parameters():
+    """Get current parameter configuration"""
+    provider = session.get('current_provider', 'ollama')
+    params = session.get('current_parameters', PROVIDER_CONFIG[provider]['parameters'])
+    return jsonify(params)
+
+@app.route('/update_params', methods=['POST'])
+def update_parameters():
+    """Update parameter configuration"""
+    data = request.json
+    
+    # Validate parameters
+    if 'temperature' in data:
+        temp = float(data['temperature'])
+        if temp < 0 or temp > 1:
+            return jsonify({
+                'success': False,
+                'error': 'Temperature must be between 0 and 1'
+            }), 400
+    
+    if 'top_p' in data:
+        top_p = float(data['top_p'])
+        if top_p < 0 or top_p > 1:
+            return jsonify({
+                'success': False,
+                'error': 'Top-p must be between 0 and 1'
+            }), 400
+    
+    # Update parameters in session
+    current_params = session.get('current_parameters', 
+                               PROVIDER_CONFIG[session.get('current_provider', 'ollama')]['parameters'])
+    current_params.update(data)
+    session['current_parameters'] = current_params
+    
+    return jsonify({
+        'success': True,
+        'parameters': current_params
+    })
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -127,4 +241,4 @@ def reset():
     return jsonify({'status': 'success'})
 
 if __name__ == '__main__':
-    app.run(debug=False) 
+    app.run(debug=False)
