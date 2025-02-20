@@ -4,10 +4,18 @@
 Add CBORG support to the existing engine.py while maintaining all current functionality. We'll start with the web interface to make testing and debugging easier.
 
 ## Phase 1: Web Interface Enhancement
-- [ ] Add provider selection to web UI:
-  - [ ] Provider dropdown (Ollama/CBORG)
-  - [ ] Model selection per provider
-  - [ ] Parameter configuration UI
+- [x] Add provider selection to web UI:
+  - [x] Provider dropdown (Ollama/CBORG)
+  - [x] Model selection per provider
+  - [x] Parameter configuration UI
+  Implementation details:
+  - Added /providers endpoint for listing available providers
+  - Added /select_provider endpoint for switching providers
+  - Added /models endpoint for model selection
+  - Added /params endpoint for parameter configuration
+  - Added comprehensive test coverage
+  - Using session management for state
+  - Added parameter validation (temperature, top-p)
 - [ ] Update chat interface:
   - [ ] Code highlighting improvements
   - [ ] Chat history display
@@ -21,13 +29,18 @@ Add CBORG support to the existing engine.py while maintaining all current functi
   - [ ] Status messages
 
 ## Phase 2: CBORG Configuration
-- [ ] Add CBORG configuration to engine.py:
+- [x] Add CBORG configuration to engine.py:
   ```python
   PROVIDER_CONFIG = {
       'cborg': {
           'base_url': 'https://api.cborg.lbl.gov',
           'default_model': 'lbl/cborg-coder:latest',
-          'requires_key': True
+          'requires_key': True,
+          'parameters': {
+              'temperature': 0.7,
+              'top_p': 0.9,
+              'seed': None
+          }
       }
   }
   ```
