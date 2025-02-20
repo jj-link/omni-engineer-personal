@@ -25,65 +25,36 @@ PROVIDER_CONFIG = {
         'base_url': 'https://api.cborg.lbl.gov',
         'default_model': 'lbl/cborg-coder:latest',
         'available_models': [
+            # LBL Models
+            'lbl/cborg-coder:latest',
+            'lbl/cborg-chat:latest',
+            'lbl/cborg-vision:latest',
+            'lbl/cborg-deepthought:latest',
+            'lbl/cborg-pdfbot',
+            'lbl/llama-3',
+            'lbl/qwen-coder',
+            'lbl/qwen-vision',
+            
             # OpenAI Models
-            'openai/gpt-35-turbo',
             'openai/gpt-4o',
             'openai/gpt-4o-mini',
             'openai/o1',
             'openai/o1-mini',
             'openai/o3-mini',
-            'openai/chatgpt:latest',
-            
-            # LBL Models
-            'lbl/cborg-coder:latest',
-            'lbl/cborg-coder:chat',
-            'lbl/cborg-coder-base:latest',
-            'lbl/cborg-chat:latest',
-            'lbl/cborg-chat:chat',
-            'lbl/cborg-vision:latest',
-            'lbl/cborg-deepthought:latest',
-            'lbl/cborg-pdfbot',
-            'lbl/llama',
-            'lbl/llama-3',
-            'lbl/llama-vision',
-            'lbl/qwen-coder',
-            'lbl/qwen-vision',
-            'lbl/labgpt',
-            'lbl/failbot',
-            'lbl/nomic-embed-text',
-            'lbl/deepseek-r1:llama-70b',
             
             # Anthropic Models
-            'anthropic/claude-haiku:latest',
             'anthropic/claude-haiku',
-            'anthropic/claude:latest',
             'anthropic/claude-sonnet',
-            'anthropic/claude-sonnet:v1',
             'anthropic/claude-opus',
             
             # Google Models
             'google/gemini-pro',
             'google/gemini-flash',
-            'google/gemini:latest',
-            
-            # AWS Models
-            'aws/mistral-large',
-            'aws/llama-3.1-405b',
-            'aws/llama-3.1-8b',
-            'aws/llama-3.1-70b',
-            'aws/command-r-v1',
-            'aws/command-r-plus-v1',
-            
-            # Azure Models
-            'azure/phi-3-medium-4k',
-            'azure/phi-3.5-moe',
-            'azure/deepseek-r1',
             
             # Other Models
             'wolfram/alpha'
         ],
         'requires_key': True,
-        'api_key_env': 'CBORG_API_KEY',
         'parameters': {
             'temperature': 0.7,
             'top_p': 0.9,
@@ -196,6 +167,22 @@ def get_models():
                 'description': 'Lab-hosted deep reasoning model based on DeepSeekR1-Distill Llama 70B (experimental)',
                 'capabilities': ['chat']
             },
+            'lbl/cborg-pdfbot': {
+                'description': 'Specialized model for PDF document analysis and Q&A',
+                'capabilities': ['chat', 'document']
+            },
+            'lbl/llama-3': {
+                'description': 'Base Llama 3 model with general chat capabilities',
+                'capabilities': ['chat']
+            },
+            'lbl/qwen-coder': {
+                'description': 'Specialized code assistance model based on Qwen',
+                'capabilities': ['code', 'chat']
+            },
+            'lbl/qwen-vision': {
+                'description': 'Vision-capable model based on Qwen architecture',
+                'capabilities': ['vision', 'chat']
+            },
             'openai/gpt-4o': {
                 'description': 'The latest high-quality multi-modal model from OpenAI for chat, coding and more',
                 'capabilities': ['code', 'chat', 'vision']
@@ -239,10 +226,6 @@ def get_models():
             'wolfram/alpha': {
                 'description': 'Knowledge base query source',
                 'capabilities': ['query']
-            },
-            'openai/dall-e': {
-                'description': 'Generate images from text using OpenAI DALL-E 3.0',
-                'capabilities': ['image-gen']
             }
         }
         
@@ -284,23 +267,27 @@ def get_models():
 
 @app.route('/switch_model', methods=['POST'])
 def switch_model():
-    """Switch to a different model"""
+    """Switch to a different model."""
     try:
         data = request.get_json()
         if not data or 'model' not in data:
             return jsonify({
-                'success': False,
                 'error': 'No model specified'
             }), 400
         
         model = data['model']
         provider = session.get('current_provider', default_provider)
         
-        # Validate model exists for provider
+        # Validate provider
+        if provider not in PROVIDER_CONFIG:
+            return jsonify({
+                'error': f'Invalid provider: {provider}'
+            }), 400
+        
+        # Validate model availability
         if model not in PROVIDER_CONFIG[provider]['available_models']:
             return jsonify({
-                'success': False,
-                'error': f'Model {model} not available for provider {provider}'
+                'error': f'Model {model} is not available for provider {provider}'
             }), 400
         
         # Update session
@@ -315,9 +302,9 @@ def switch_model():
         })
         
     except Exception as e:
+        print(f"Error in switch_model: {str(e)}")
         return jsonify({
-            'success': False,
-            'error': str(e)
+            'error': f'Failed to switch model: {str(e)}'
         }), 500
 
 @app.route('/params', methods=['GET'])
