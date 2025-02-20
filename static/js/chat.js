@@ -1,42 +1,72 @@
 // Model selection functionality
-async function fetchModels() {
+let modelSelector;
+
+async function initializeModelSelector() {
     try {
+        console.log('Fetching models...');  // Debug log
         const response = await fetch('/models');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const data = await response.json();
         console.log('Models response:', data);  // Debug log
         
-        const modelSelect = document.getElementById('model-select');
-        modelSelect.innerHTML = ''; // Clear existing options
+        if (data.error) {
+            throw new Error(data.error);
+        }
         
-        // Add a disabled placeholder option
-        const placeholderOption = document.createElement('option');
-        placeholderOption.value = '';
-        placeholderOption.textContent = 'Select a model...';
-        placeholderOption.disabled = true;
-        modelSelect.appendChild(placeholderOption);
-        
-        // Add all available models
+        // Group models by provider
+        const modelsByProvider = new Map();
         data.models.forEach(model => {
-            const option = document.createElement('option');
-            option.value = model;
-            option.textContent = model;
-            // Select if it matches current_model from backend
-            if (model === data.current_model) {
-                option.selected = true;
+            const [provider] = model.split('/');
+            if (!modelsByProvider.has(provider)) {
+                modelsByProvider.set(provider, []);
             }
-            modelSelect.appendChild(option);
+            modelsByProvider.get(provider).push({
+                id: model,
+                description: data.descriptions?.[model] || 'No description available',
+                capabilities: data.capabilities?.[model] || []
+            });
+        });
+        
+        console.log('Models grouped by provider:', modelsByProvider);  // Debug log
+
+        // Initialize model selector
+        const selectorElement = document.getElementById('model-selector');
+        if (!selectorElement) {
+            throw new Error('Model selector element not found');
+        }
+        
+        modelSelector = new ModelSelector(selectorElement, {
+            onModelSelect: async (model) => {
+                try {
+                    console.log('Model selected:', model);  // Debug log
+                    await switchModel(model.id);
+                } catch (error) {
+                    console.error('Error switching model:', error);
+                    appendMessage(`Failed to switch model: ${error.message}`, false);
+                }
+            }
         });
 
-        // If no model is selected, select the default
-        if (!modelSelect.value && data.default_model) {
-            modelSelect.value = data.default_model;
+        modelSelector.providers = modelsByProvider;
+        
+        // Set current model if available
+        if (data.current_model) {
+            const currentProvider = data.current_model.split('/')[0];
+            const providerModels = modelsByProvider.get(currentProvider);
+            const currentModelData = providerModels?.find(m => m.id === data.current_model);
+            if (currentModelData) {
+                modelSelector.selectedModel = currentModelData;
+            }
         }
-
-        // Make sure the select is visible
-        modelSelect.style.display = 'block';
-        modelSelect.parentElement.style.display = 'flex';
+        
+        modelSelector.render();
+        console.log('Model selector initialized');  // Debug log
     } catch (error) {
-        console.error('Error fetching models:', error);
+        console.error('Error initializing model selector:', error);
         appendMessage('Error loading models. Please try refreshing the page.', false);
     }
 }
@@ -61,20 +91,13 @@ async function switchModel(model) {
     } catch (error) {
         console.error('Error switching model:', error);
         appendMessage(`Failed to switch model: ${error.message}`, false);
+        throw error;
     }
 }
 
-// Event listener for model selection
-document.getElementById('model-select').addEventListener('change', (e) => {
-    const selectedModel = e.target.value;
-    if (selectedModel) {
-        switchModel(selectedModel);
-    }
-});
-
-// Initialize model selector when page loads
+// Initialize everything when page loads
 document.addEventListener('DOMContentLoaded', () => {
-    fetchModels();
+    initializeModelSelector();
 });
 
 let currentImageData = null;
@@ -373,9 +396,6 @@ window.addEventListener('load', async () => {
         
         // Reset token usage display
         updateTokenUsage(0, 200000);
-        
-        // Fetch models on page load
-        fetchModels();
     } catch (error) {
         console.error('Error resetting conversation:', error);
     }
