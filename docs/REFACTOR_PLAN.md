@@ -82,9 +82,11 @@ Goal: Add CBORG support now that foundation is ready
 - [x] Add Ollama-specific options:
   - [x] Context window
   - [x] Model file path
-- [ ] Add CBORG-specific options:
-  - [ ] API version
-  - [ ] Response format
+- [x] Add CBORG-specific features:
+  - [x] OpenAI-compatible API format
+  - [x] Model availability checks
+  - [x] Token usage tracking
+  - [x] Error handling with detailed messages
 
 ## Success Criteria
 - [x] Switch between providers with single argument
