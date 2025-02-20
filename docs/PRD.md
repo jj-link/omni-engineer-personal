@@ -1,7 +1,7 @@
 # Product Requirements Document: Multi-Model Support for Omni Engineer
 
 ## Overview
-Add CBORG support to the existing Ollama-based engineer while preserving all current functionality. This is a focused enhancement to enable the use of both local Ollama models and CBORG's cloud models.
+Add CBORG support to the existing Ollama-based engineer while preserving all current functionality. This is a focused enhancement to enable the use of both local Ollama models and CBORG's cloud models through both CLI and web interfaces.
 
 ## Current State vs Target State
 
@@ -13,13 +13,20 @@ Add CBORG support to the existing Ollama-based engineer while preserving all cur
   - File system operations
   - Conversation history
   - Asynchronous operation
+  - Web interface support via Gradio
 
 ### Target State
 Same as current state, plus:
 - Support for CBORG models alongside Ollama
-- Ability to switch between providers via CLI arguments
+- Ability to switch between providers via CLI arguments and web interface
 - Proper error handling for both providers
 - Environment variable support for API keys
+- Enhanced web interface with:
+  - Model selection dropdown
+  - Provider selection
+  - Parameter configuration
+  - Code highlighting and formatting
+  - Chat history display
 
 ## Technical Requirements
 
@@ -56,20 +63,35 @@ PROVIDER_CONFIG = {
 - `--top-p`: Set top-p sampling (0-1)
 - `--seed`: Set random seed for reproducibility
 
-### 3. Error Handling
+### 3. Web Interface Requirements
+- Model provider selection
+- Model selection per provider
+- Parameter configuration:
+  - Temperature
+  - Top-p sampling
+  - Random seed
+- Code input/output with syntax highlighting
+- Chat history display
+- File upload/download support
+- Project context management
+- Error display and handling
+
+### 4. Error Handling
 - Connection errors
 - API authentication
 - Model availability
 - Response validation
 - Automatic retries for transient errors
 
-### 4. Testing Requirements
+### 5. Testing Requirements
 - Unit tests for provider selection
 - Integration tests for both providers
 - Error handling test cases
+- Web interface component tests
 
 ## Success Criteria
-1. Can switch between Ollama and CBORG models using CLI arguments
+1. Can switch between Ollama and CBORG models using both CLI and web interface
 2. All existing functionality works with both providers
 3. Proper error handling and recovery
 4. No regression in current features
+5. Web interface provides full feature parity with CLI
