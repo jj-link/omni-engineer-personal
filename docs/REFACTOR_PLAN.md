@@ -42,6 +42,58 @@ Add CBORG support to the existing engine.py while maintaining all current functi
   - [ ] Add provider icons/logos for each group
   - [ ] Add "Recently Used" or "Favorites" section
   - [ ] Persist user preferences (last used model, favorites)
+  - [ ] Implement three-level model selection hierarchy:
+    - [ ] Level 1: Provider type (CBORG/Ollama)
+    - [ ] Level 2: Model provider (OpenAI, Anthropic, etc. for CBORG)
+    - [ ] Level 3: Individual models
+  - [ ] Add Ollama model detection:
+    - [ ] Create endpoint to list local Ollama models using 'ollama list'
+    - [ ] Parse and format Ollama model metadata
+    - [ ] Show model file sizes where available
+  - [ ] Update model metadata handling:
+    - [ ] Create unified model metadata schema
+    - [ ] Add provider-specific metadata parsers
+    - [ ] Implement model capability detection
+  - [ ] Enhance model organization:
+    - [ ] Group CBORG models by provider
+    - [ ] Group Ollama models by type/purpose
+    - [ ] Add model tags and filtering
+    - [ ] Implement model search across all levels
+    - [ ] Implement model sorting by file size
+  - [ ] Add model management features:
+    - [ ] Show Ollama model status (pulled/not pulled)
+    - [ ] Display model file sizes
+    - [ ] Add model info tooltips
+    - [ ] Implement model removal option (for Ollama)
+    - [ ] Implement context window tracking:
+      - [ ] Add model context limits to metadata
+      - [ ] Track current context usage in session
+      - [ ] Create visual context usage indicator:
+        - [ ] Show total context window size
+        - [ ] Display current usage / total available
+        - [ ] Add warning when nearing limit (80%+)
+        - [ ] Update in real-time as conversation grows
+        - [ ] Show estimated tokens per message
+      - [ ] Add context management options:
+        - [ ] Trim older messages when nearing limit
+        - [ ] When context reaches limit, create a condensed version of the conversation history, that is then used as the context for a new conversation
+
+## Backend Changes Required
+- [ ] Enhance Ollama integration:
+  - [ ] Add endpoint to list all local Ollama models
+  - [ ] Parse Ollama model metadata and status
+  - [ ] Add model pull command support
+  - [ ] Add model removal support
+- [ ] Update provider configuration:
+  - [ ] Refactor PROVIDER_CONFIG for nested structure
+  - [ ] Add provider type categorization
+  - [ ] Add context window limits per model
+  - [ ] Implement token counting for messages
+- [ ] Enhance model selection logic:
+  - [ ] Update model switching endpoint
+  - [ ] Add model availability checks
+  - [ ] Reset context tracking on model switch
+  - [ ] Handle context overflow scenarios
 
 ## Phase 2: CBORG Configuration
 - [x] Add CBORG configuration to engine.py:
