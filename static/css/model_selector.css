@@ -111,12 +111,10 @@
 
 /* Model items */
 .model-item {
-    padding: 10px;
-    background: var(--bg-secondary);
-    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding: 8px;
     cursor: pointer;
-    transition: all 0.2s ease;
-    font-size: 18px;
 }
 
 .model-item:hover {

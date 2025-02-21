@@ -65,10 +65,7 @@ async function initializeModelSelector() {
             models.forEach(model => {
                 const modelItem = document.createElement('div');
                 modelItem.className = 'model-item';
-                modelItem.innerHTML = `
-                    <img src="/static/img/model-icon.png" alt="${model}" class="model-icon">
-                    <span class="model-name">${model}</span>
-                `;
+                modelItem.innerHTML = `<div style="display: flex; align-items: center;"><img src="/static/img/${logoFile}" style="width: 16px; height: 16px; margin-right: 12px;" class="model-icon"><span class="model-name">${model}</span></div>`;
                 modelItem.title = data.descriptions?.[model] || '';
                 modelItem.addEventListener('click', () => selectModel(model));
                 modelList.appendChild(modelItem);
