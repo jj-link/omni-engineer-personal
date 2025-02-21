@@ -42,8 +42,22 @@ async function initializeModelSelector() {
             
             const header = document.createElement('div');
             header.className = 'provider-header';
+            
+            // Map provider names to their logo files
+            const logoMap = {
+                'anthropic': 'anthropic-logo.jpg',
+                'aws': 'aws-logo-transparent.jpg',
+                'google': 'google-logo-transparent.jpg',
+                'lbnl': 'lbnl_logo.jpg',
+                'ollama': 'ollama_logo.jpg',
+                'openai': 'openai-logo.jpg',
+                'wolphram': 'wolphram_logo.jpg'
+            };
+            
+            const logoFile = logoMap[provider.toLowerCase()] || 'default_providerlogo.jpg';
+            
             header.innerHTML = `
-                <img src="/static/img/provider-icon.png" alt="${provider}" class="provider-icon">
+                <img src="/static/img/${logoFile}" style="width: 16px; height: 16px;" class="provider-icon">
                 <span>${provider}</span>
                 <span class="expand-icon">+</span>
             `;
