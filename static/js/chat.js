@@ -56,11 +56,7 @@ async function initializeModelSelector() {
             
             const logoFile = logoMap[provider.toLowerCase()] || 'default_providerlogo.jpg';
             
-            header.innerHTML = `
-                <img src="/static/img/${logoFile}" style="width: 16px; height: 16px;" class="provider-icon">
-                <span>${provider}</span>
-                <span class="expand-icon">+</span>
-            `;
+            header.innerHTML = `<div style="display: flex; align-items: center;"><img src="/static/img/${logoFile}" style="width: 16px; height: 16px; margin-right: 12px;" class="provider-icon"><span>${provider}</span><span class="expand-icon">+</span></div>`;
             
             const modelList = document.createElement('div');
             modelList.className = 'model-list';

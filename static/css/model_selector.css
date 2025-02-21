@@ -60,13 +60,15 @@
 .provider-header {
     display: flex;
     align-items: center;
-    padding: 10px;
+    padding: 8px;
 }
 
 .provider-icon {
     width: 16px;
     height: 16px;
-    margin-right: 10px;
+    margin-right: 12px;
+    display: inline-block;
+    vertical-align: middle;
 }
 
 .provider-name {
@@ -158,6 +160,10 @@
 .model-size {
     font-size: 16px;
     opacity: 0.7;
+}
+
+.expand-icon {
+    margin-left: 4px;
 }
 
 /* Scrollbar styling */
