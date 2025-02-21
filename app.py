@@ -523,4 +523,4 @@ def reset():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)  # Enable debug mode for better error messages
+    app.run(debug=True, port=5001)  # Enable debug mode and use port 5001
