@@ -1005,56 +1005,47 @@ async def main():
     console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
 
     parser = argparse.ArgumentParser(description='Omni Engineer - Multi-Model AI Assistant')
-    parser.add_argument('--api', choices=['cborg', 'ollama'], default='ollama',
-                      help='AI provider to use (default: ollama)')
-    parser.add_argument('--model', help='Model name to use (provider-specific)')
-    
-    # Add common parameter arguments
-    parser.add_argument('--temperature', type=float,
-                      help='Temperature for response generation (0.0-1.0)')
-    parser.add_argument('--top-p', type=float,
-                      help='Top-p sampling parameter (0.0-1.0)')
-    parser.add_argument('--seed', type=int,
-                      help='Random seed for reproducible responses')
+    parser.add_argument('--provider', type=str, choices=['ollama', 'cborg'], default='ollama',
+                      help='Provider to use (ollama or cborg)')
+    parser.add_argument('--temperature', type=float, default=None,
+                      help='Temperature parameter for text generation (0.0 to 1.0)')
+    parser.add_argument('--top-p', type=float, default=None,
+                      help='Top-p parameter for text generation (0.0 to 1.0)')
+    parser.add_argument('--seed', type=int, default=None,
+                      help='Seed for deterministic generation (non-negative integer)')
     
     args = parser.parse_args()
+    
+    # Validate temperature
+    if args.temperature is not None:
+        if not 0.0 <= args.temperature <= 1.0:
+            raise ValueError("Temperature must be between 0.0 and 1.0")
+        PROVIDER_CONFIG[args.provider]['parameters']['temperature'] = args.temperature
+    
+    # Validate top_p
+    if args.top_p is not None:
+        if not 0.0 <= args.top_p <= 1.0:
+            raise ValueError("Top-p must be between 0.0 and 1.0")
+        PROVIDER_CONFIG[args.provider]['parameters']['top_p'] = args.top_p
+    
+    # Validate seed
+    if args.seed is not None:
+        if args.seed < 0:
+            raise ValueError("Seed must be a non-negative integer")
+        PROVIDER_CONFIG[args.provider]['parameters']['seed'] = args.seed
 
-    # Validate provider configuration
-    if args.api not in PROVIDER_CONFIG:
-        console.print(Panel(f"Error: Unknown provider '{args.api}'", style="bold red"))
-        return
+    # Check for CBORG API key if using CBORG provider
+    if args.provider == 'cborg':
+        cborg_api_key = os.getenv('CBORG_API_KEY')
+        if not cborg_api_key:
+            raise ValueError("CBORG_API_KEY not found in environment variables")
 
-    provider_config = PROVIDER_CONFIG[args.api]
-    if provider_config['requires_key'] and not os.getenv(f"{args.api.upper()}_API_KEY"):
-        console.print(Panel(f"Error: {args.api.upper()}_API_KEY not found in environment variables", style="bold red"))
-        return
-
-    # Set model if specified
-    if args.model:
-        provider_config['default_model'] = args.model
-
-    console.print(Panel(f"Welcome to Omni Engineer using {args.api.upper()} provider!", title="Welcome", style="bold green"))
+    console.print(Panel(f"Welcome to Omni Engineer using {args.provider.upper()} provider!", title="Welcome", style="bold green"))
     console.print("Type 'exit' to end the conversation.")
     console.print("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.")
     console.print("Type 'reset' to clear the conversation history.")
     console.print("Type 'save chat' to save the conversation to a Markdown file.")
     console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
-
-    # Update parameters if specified
-    if args.temperature is not None:
-        if 0.0 <= args.temperature <= 1.0:
-            PROVIDER_CONFIG[args.api]['parameters']['temperature'] = args.temperature
-        else:
-            console.print(Panel("Warning: Temperature must be between 0.0 and 1.0. Using default.", style="yellow"))
-
-    if args.top_p is not None:
-        if 0.0 <= args.top_p <= 1.0:
-            PROVIDER_CONFIG[args.api]['parameters']['top_p'] = args.top_p
-        else:
-            console.print(Panel("Warning: Top-p must be between 0.0 and 1.0. Using default.", style="yellow"))
-
-    if args.seed is not None:
-        PROVIDER_CONFIG[args.api]['parameters']['seed'] = args.seed
 
     while True:
         user_input = await get_user_input()
@@ -1088,7 +1079,7 @@ async def main():
                 iteration_count = 0
                 try:
                     while automode and iteration_count < max_iterations:
-                        if args.api == 'ollama':
+                        if args.provider == 'ollama':
                             response, exit_continuation = await chat_with_ollama(user_input, current_iteration=iteration_count+1, max_iterations=max_iterations)
                         else:
                             response, exit_continuation = await chat_with_cborg(user_input, current_iteration=iteration_count+1, max_iterations=max_iterations)
@@ -1115,7 +1106,7 @@ async def main():
             continue
 
         try:
-            if args.api == 'ollama':
+            if args.provider == 'ollama':
                 response, _ = await chat_with_ollama(user_input)
             else:
                 response, _ = await chat_with_cborg(user_input)

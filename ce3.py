@@ -15,6 +15,7 @@ import sys
 import logging
 import requests
 from dotenv import load_dotenv
+import ollama  # Add ollama import
 
 from config import Config
 from tools.base import BaseTool
@@ -42,7 +43,7 @@ class Assistant:
     """
 
     def __init__(self, provider='anthropic'):
-        self.provider = provider
+        self._provider = None  # Private provider field
         self.conversation_history: List[Dict[str, Any]] = []
         self.console = Console()
         self.thinking_enabled = getattr(Config, 'ENABLE_THINKING', False)
@@ -50,22 +51,36 @@ class Assistant:
         self.total_tokens_used = 0
         self.tools = self._load_tools()
         
+        # Set provider after initializing other fields
+        self.provider = provider
+
+    @property
+    def provider(self):
+        return self._provider
+
+    @provider.setter
+    def provider(self, value):
+        """Set the provider and initialize provider-specific settings"""
+        if value not in ['anthropic', 'cborg', 'ollama']:
+            raise ValueError(f"Unsupported provider: {value}")
+
         # Initialize provider-specific settings
-        if provider == 'anthropic':
+        if value == 'anthropic':
             if not getattr(Config, 'ANTHROPIC_API_KEY', None):
                 raise ValueError("No ANTHROPIC_API_KEY found in environment variables")
             self.client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
-        elif provider == 'cborg':
+            self.model = Config.MODEL
+        elif value == 'cborg':
             if not os.getenv('CBORG_API_KEY'):
                 raise ValueError("No CBORG_API_KEY found in environment variables")
             self.api_key = os.getenv('CBORG_API_KEY')
             self.base_url = 'https://api.cborg.lbl.gov'
             self.model = 'lbl/cborg-coder:chat'  # Using CBORG's dedicated coding model with chat endpoint
-        elif provider == 'ollama':
+        elif value == 'ollama':
             self.base_url = 'http://localhost:11434'
             self.model = 'codellama'
-        else:
-            raise ValueError(f"Unsupported provider: {provider}")
+
+        self._provider = value
 
     def _get_completion(self):
         """
@@ -202,8 +217,48 @@ class Assistant:
                     return "No response content available."
 
             elif self.provider == 'ollama':
-                # TODO: Implement Ollama support
-                raise NotImplementedError("Ollama support not yet implemented")
+                try:
+                    # Prepare conversation history for Ollama
+                    messages = []
+                    for msg in self.conversation_history:
+                        content = msg['content']
+                        if isinstance(content, list):
+                            # Handle multimodal content
+                            text_parts = []
+                            for part in content:
+                                if part.get('type') == 'text':
+                                    text_parts.append(part['text'])
+                            content = ' '.join(text_parts)
+                        messages.append({
+                            'role': msg['role'],
+                            'content': content
+                        })
+
+                    # Create Ollama client and make request
+                    client = ollama.Client(host='http://localhost:11434')
+                    response = client.chat(
+                        model=self.model,
+                        messages=messages,
+                        stream=False,
+                        options={
+                            'temperature': self.temperature,
+                            'top_p': 0.9
+                        }
+                    )
+
+                    # Add response to conversation history
+                    assistant_message = {
+                        'role': 'assistant',
+                        'content': response['message']['content']
+                    }
+                    self.conversation_history.append(assistant_message)
+
+                    # Return just the content
+                    return response['message']['content']
+
+                except Exception as e:
+                    logging.error(f"Ollama error: {str(e)}")
+                    return f"Error: {str(e)}"
             
             else:
                 raise ValueError(f"Unsupported provider: {self.provider}")

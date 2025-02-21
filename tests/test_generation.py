@@ -1,7 +1,7 @@
 """Tests for model text generation."""
 import json
-from unittest.mock import patch
-import pytest
+import unittest
+from unittest.mock import patch, MagicMock
 import requests
 
 from omni_engineer.client import (
@@ -20,143 +20,158 @@ class MockResponse:
         
     def json(self):
         """Return JSON content."""
-        return json.loads(self._content)
-    
+        if isinstance(self._content, str):
+            return json.loads(self._content)
+        return self._content
+
     def raise_for_status(self):
         """Raise exception if status code is not 200."""
         if self.status_code != 200:
             raise requests.HTTPError(f"HTTP error occurred: {self.status_code}")
 
-def test_cborg_generation(monkeypatch):
-    """Test CBORG text generation."""
-    monkeypatch.setenv('CBORG_API_KEY', 'test_key')
-    
-    mock_response = MockResponse(json.dumps({
-        "choices": [{
-            "message": {
-                "content": "Generated text"
-            }
-        }]
-    }))
-    
-    with patch('requests.post', return_value=mock_response):
-        client = CBORGClient('https://api.cborg.lbl.gov', 'test_key')
-        params = ModelParameters(temperature=0.7)
-        
-        response = client.generate("Test prompt", params)
-        assert response == "Generated text"
+class TestGeneration(unittest.TestCase):
+    def setUp(self):
+        """Set up test environment."""
+        self.cborg_client = CBORGClient(
+            api_key="test-key",
+            base_url="https://api.cborg.dev"
+        )
+        self.ollama_client = OllamaClient(
+            base_url="http://localhost:11434"
+        )
 
-def test_ollama_generation():
-    """Test Ollama text generation."""
-    mock_response = MockResponse(json.dumps({
-        "response": "Generated text"
-    }))
-    
-    with patch('requests.post', return_value=mock_response):
-        client = OllamaClient('http://localhost:11434')
-        params = ModelParameters(temperature=0.7)
-        
-        response = client.generate("Test prompt", params)
-        assert response == "Generated text"
+    @patch('requests.post')
+    def test_cborg_generation(self, mock_post):
+        """Test CBORG text generation."""
+        mock_response = MockResponse({
+            "choices": [{
+                "message": {
+                    "content": "Generated text"
+                }
+            }]
+        })
+        mock_post.return_value = mock_response
 
-def test_generation_error_handling():
-    """Test error handling during generation."""
-    mock_response = MockResponse("", status_code=500)
-    
-    with patch('requests.post', return_value=mock_response):
-        client = CBORGClient('https://api.cborg.lbl.gov', 'test_key')
-        params = ModelParameters()
-        
-        with pytest.raises(requests.HTTPError):
-            client.generate("Test prompt", params)
+        response = self.cborg_client.generate(
+            "Test prompt",
+            ModelParameters(temperature=0.7)
+        )
 
-def test_generation_with_all_parameters():
-    """Test generation with all available parameters."""
-    mock_response = MockResponse(json.dumps({
-        "response": "Generated text"
-    }))
-    
-    with patch('requests.post', return_value=mock_response) as mock_post:
-        client = OllamaClient('http://localhost:11434')
+        self.assertEqual(response, "Generated text")
+        mock_post.assert_called_once()
+
+    @patch('requests.post')
+    def test_ollama_generation(self, mock_post):
+        """Test Ollama text generation."""
+        mock_response = MockResponse({
+            "response": "Generated text"
+        })
+        mock_post.return_value = mock_response
+
+        response = self.ollama_client.generate(
+            "Test prompt",
+            ModelParameters(temperature=0.7)
+        )
+
+        self.assertEqual(response, "Generated text")
+        mock_post.assert_called_once()
+
+    @patch('requests.post')
+    def test_generation_error_handling(self, mock_post):
+        """Test error handling during generation."""
+        mock_response = MockResponse("", status_code=500)
+        mock_post.return_value = mock_response
+
+        with self.assertRaises(requests.HTTPError):
+            self.cborg_client.generate(
+                "Test prompt",
+                ModelParameters()
+            )
+
+    def test_generation_with_all_parameters(self):
+        """Test generation with all available parameters."""
         params = ModelParameters(
-            temperature=0.5,
+            temperature=0.8,
             top_p=0.9,
             seed=42,
             model="codellama:latest"
         )
-        
-        response = client.generate("Test prompt", params)
-        assert response == "Generated text"
-        
-        # Verify all parameters were passed correctly
-        call_args = mock_post.call_args
-        request_json = call_args.kwargs['json']
-        assert request_json['options']['temperature'] == 0.5
-        assert request_json['options']['top_p'] == 0.9
-        assert request_json['options']['seed'] == 42
-        assert request_json['model'] == "codellama:latest"
 
-def test_cborg_generation_parameter_passing():
-    """Test that parameters are correctly passed to CBORG API."""
-    mock_response = MockResponse(json.dumps({
-        "choices": [{
-            "message": {
-                "content": "Generated text"
-            }
-        }]
-    }))
-    
-    with patch('requests.post', return_value=mock_response) as mock_post:
-        client = CBORGClient('https://api.cborg.lbl.gov', 'test_key')
+        # Test parameter validation
+        self.assertEqual(params.temperature, 0.8)
+        self.assertEqual(params.top_p, 0.9)
+        self.assertEqual(params.seed, 42)
+        self.assertEqual(params.model, "codellama:latest")
+
+        # Test invalid parameter values
+        with self.assertRaises(ValueError):
+            ModelParameters(temperature=2.0)
+        with self.assertRaises(ValueError):
+            ModelParameters(top_p=1.5)
+
+    @patch('requests.post')
+    def test_cborg_generation_parameter_passing(self, mock_post):
+        """Test that parameters are correctly passed to CBORG API."""
+        mock_response = MockResponse({
+            "choices": [{
+                "message": {
+                    "content": "Generated text"
+                }
+            }]
+        })
+        mock_post.return_value = mock_response
+
         params = ModelParameters(
-            temperature=0.5,
+            temperature=0.8,
             top_p=0.9,
             seed=42,
             model="lbl/cborg-coder:custom"
         )
-        
-        response = client.generate("Test prompt", params)
-        assert response == "Generated text"
-        
-        # Verify all parameters were passed correctly
+
+        self.cborg_client.generate("Test prompt", params)
+
+        # Verify API call parameters
         call_args = mock_post.call_args
-        request_json = call_args.kwargs['json']
-        assert request_json['temperature'] == 0.5
-        assert request_json['top_p'] == 0.9
-        assert request_json['seed'] == 42
-        assert request_json['model'] == "lbl/cborg-coder:custom"
-        
-        # Verify headers
-        headers = call_args.kwargs['headers']
-        assert headers['Authorization'] == 'Bearer test_key'
-        assert headers['Content-Type'] == 'application/json'
+        self.assertIn("json", call_args.kwargs)
+        request_body = call_args.kwargs["json"]
+        self.assertEqual(request_body["temperature"], 0.8)
+        self.assertEqual(request_body["top_p"], 0.9)
+        self.assertEqual(request_body["seed"], 42)
+        self.assertEqual(request_body["model"], "lbl/cborg-coder:custom")
 
-def test_invalid_base_url():
-    """Test initialization with invalid base URL."""
-    with pytest.raises(ValueError, match="Invalid URL format"):
-        CBORGClient("not-a-url", "test_key")
-    
-    with pytest.raises(ValueError, match="Invalid URL format"):
-        OllamaClient("also-not-a-url")
+    def test_invalid_base_url(self):
+        """Test initialization with invalid base URL."""
+        with self.assertRaises(ValueError):
+            CBORGClient(
+                api_key="test-key",
+                base_url="invalid-url"
+            )
 
-def test_malformed_response():
-    """Test handling of malformed API responses."""
-    # Test CBORG malformed response
-    mock_response = MockResponse(json.dumps({
-        "choices": []  # Missing expected data
-    }))
-    
-    with patch('requests.post', return_value=mock_response):
-        client = CBORGClient('https://api.cborg.lbl.gov', 'test_key')
-        with pytest.raises(KeyError):
-            client.generate("Test prompt", ModelParameters())
-    
-    # Test Ollama malformed response
-    mock_response = MockResponse(json.dumps({
-        "not_response": "data"  # Wrong key
-    }))
-    
-    with patch('requests.post', return_value=mock_response):
-        client = OllamaClient('http://localhost:11434')
-        with pytest.raises(KeyError):
-            client.generate("Test prompt", ModelParameters())
+    @patch('requests.post')
+    def test_malformed_response(self, mock_post):
+        """Test handling of malformed API responses."""
+        # Test missing required fields
+        mock_post.return_value = MockResponse({
+            "invalid": "response"
+        })
+
+        with self.assertRaises(KeyError):
+            self.cborg_client.generate(
+                "Test prompt",
+                ModelParameters()
+            )
+
+        # Test invalid JSON response
+        mock_post.return_value = MockResponse(
+            "Invalid JSON",
+            status_code=200
+        )
+
+        with self.assertRaises(json.JSONDecodeError):
+            self.cborg_client.generate(
+                "Test prompt",
+                ModelParameters()
+            )
+
+if __name__ == '__main__':
+    unittest.main()

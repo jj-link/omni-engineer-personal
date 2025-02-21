@@ -1,5 +1,7 @@
-import pytest
+"""Tests for parameter handling."""
+
 import os
+import unittest
 from unittest.mock import patch, AsyncMock
 import copy
 
@@ -10,98 +12,125 @@ with patch.dict(os.environ, {'TAVILY_API_KEY': 'test_key'}):
 # Store original config for reset
 ORIGINAL_CONFIG = copy.deepcopy(PROVIDER_CONFIG)
 
-@pytest.fixture(autouse=True)
-def reset_config():
-    """Reset PROVIDER_CONFIG before each test"""
-    global PROVIDER_CONFIG
-    PROVIDER_CONFIG.clear()
-    PROVIDER_CONFIG.update(copy.deepcopy(ORIGINAL_CONFIG))
+class TestParameters(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up test environment."""
+        # Reset config before each test
+        global PROVIDER_CONFIG
+        PROVIDER_CONFIG.clear()
+        PROVIDER_CONFIG.update(copy.deepcopy(ORIGINAL_CONFIG))
+        
+        # Mock user input
+        self.mock_input = AsyncMock()
+        self.input_patcher = patch('omni_core.engine.get_user_input', new=self.mock_input)
+        self.input_patcher.start()
 
-@pytest.mark.asyncio
-async def test_default_parameters():
-    """Test that default parameters are set correctly"""
-    with patch('sys.argv', ['engine.py']), \
-         patch('omni_core.engine.get_user_input', new_callable=AsyncMock) as mock_input:
-        
-        mock_input.side_effect = ['exit']
-        
-        # Run main
-        await main()
-        
-        # Check default parameters
-        assert PROVIDER_CONFIG['ollama']['parameters']['temperature'] == 0.7
-        assert PROVIDER_CONFIG['ollama']['parameters']['top_p'] == 0.9
-        assert PROVIDER_CONFIG['ollama']['parameters']['seed'] is None
+    async def asyncTearDown(self):
+        """Clean up test environment."""
+        self.input_patcher.stop()
 
-@pytest.mark.asyncio
-async def test_temperature_parameter():
-    """Test that temperature parameter can be set"""
-    with patch('sys.argv', ['engine.py', '--temperature', '0.5']), \
-         patch('omni_core.engine.get_user_input', new_callable=AsyncMock) as mock_input:
-        
-        mock_input.side_effect = ['exit']
-        
-        # Run main
-        await main()
-        
-        # Check temperature was set
-        assert PROVIDER_CONFIG['ollama']['parameters']['temperature'] == 0.5
+    async def test_default_parameters(self):
+        """Test that default parameters are set correctly"""
+        with patch('sys.argv', ['engine.py']):
+            self.mock_input.side_effect = ['exit']
+            
+            # Run main
+            await main()
+            
+            # Check default parameters
+            self.assertEqual(PROVIDER_CONFIG['ollama']['parameters']['temperature'], 0.7)
+            self.assertEqual(PROVIDER_CONFIG['ollama']['parameters']['top_p'], 0.9)
+            self.assertIsNone(PROVIDER_CONFIG['ollama']['parameters']['seed'])
 
-@pytest.mark.asyncio
-async def test_invalid_temperature():
-    """Test that invalid temperature is handled gracefully"""
-    with patch('sys.argv', ['engine.py', '--temperature', '1.5']), \
-         patch('omni_core.engine.get_user_input', new_callable=AsyncMock) as mock_input:
-        
-        mock_input.side_effect = ['exit']
-        
-        # Run main
-        await main()
-        
-        # Check temperature remains at default
-        assert PROVIDER_CONFIG['ollama']['parameters']['temperature'] == 0.7
+    async def test_temperature_parameter(self):
+        """Test that temperature parameter can be set"""
+        with patch('sys.argv', ['engine.py', '--temperature', '0.5']):
+            self.mock_input.side_effect = ['exit']
+            
+            # Run main
+            await main()
+            
+            # Check temperature was set
+            self.assertEqual(PROVIDER_CONFIG['ollama']['parameters']['temperature'], 0.5)
 
-@pytest.mark.asyncio
-async def test_top_p_parameter():
-    """Test that top-p parameter can be set"""
-    with patch('sys.argv', ['engine.py', '--top-p', '0.8']), \
-         patch('omni_core.engine.get_user_input', new_callable=AsyncMock) as mock_input:
+    async def test_invalid_temperature(self):
+        """Test that invalid temperature values are rejected"""
+        test_cases = [
+            ['engine.py', '--temperature', '-0.1'],
+            ['engine.py', '--temperature', '1.1'],
+            ['engine.py', '--temperature', 'invalid']
+        ]
         
-        mock_input.side_effect = ['exit']
-        
-        # Run main
-        await main()
-        
-        # Check top-p was set
-        assert PROVIDER_CONFIG['ollama']['parameters']['top_p'] == 0.8
+        for args in test_cases:
+            with self.subTest(args=args):
+                with patch('sys.argv', args), \
+                     self.assertRaises(ValueError):
+                    await main()
 
-@pytest.mark.asyncio
-async def test_seed_parameter():
-    """Test that seed parameter can be set"""
-    with patch('sys.argv', ['engine.py', '--seed', '42']), \
-         patch('omni_core.engine.get_user_input', new_callable=AsyncMock) as mock_input:
-        
-        mock_input.side_effect = ['exit']
-        
-        # Run main
-        await main()
-        
-        # Check seed was set
-        assert PROVIDER_CONFIG['ollama']['parameters']['seed'] == 42
+    async def test_top_p_parameter(self):
+        """Test that top-p parameter can be set"""
+        with patch('sys.argv', ['engine.py', '--top-p', '0.5']):
+            self.mock_input.side_effect = ['exit']
+            
+            # Run main
+            await main()
+            
+            # Check top-p was set
+            self.assertEqual(PROVIDER_CONFIG['ollama']['parameters']['top_p'], 0.5)
 
-@pytest.mark.asyncio
-async def test_parameters_with_cborg():
-    """Test that parameters work with CBORG provider"""
-    with patch('sys.argv', ['engine.py', '--api', 'cborg', '--temperature', '0.3', '--top-p', '0.95', '--seed', '123']), \
-         patch('omni_core.engine.get_user_input', new_callable=AsyncMock) as mock_input, \
-         patch.dict(os.environ, {'TAVILY_API_KEY': 'test_key', 'CBORG_API_KEY': 'test_key'}):
+    async def test_invalid_top_p(self):
+        """Test that invalid top-p values are rejected"""
+        test_cases = [
+            ['engine.py', '--top-p', '-0.1'],
+            ['engine.py', '--top-p', '1.1'],
+            ['engine.py', '--top-p', 'invalid']
+        ]
         
-        mock_input.side_effect = ['exit']
+        for args in test_cases:
+            with self.subTest(args=args):
+                with patch('sys.argv', args), \
+                     self.assertRaises(ValueError):
+                    await main()
+
+    async def test_seed_parameter(self):
+        """Test that seed parameter can be set"""
+        with patch('sys.argv', ['engine.py', '--seed', '42']):
+            self.mock_input.side_effect = ['exit']
+            
+            # Run main
+            await main()
+            
+            # Check seed was set
+            self.assertEqual(PROVIDER_CONFIG['ollama']['parameters']['seed'], 42)
+
+    async def test_invalid_seed(self):
+        """Test that invalid seed values are rejected"""
+        test_cases = [
+            ['engine.py', '--seed', '-1'],
+            ['engine.py', '--seed', 'invalid']
+        ]
         
-        # Run main
-        await main()
-        
-        # Check parameters were set for CBORG
-        assert PROVIDER_CONFIG['cborg']['parameters']['temperature'] == 0.3
-        assert PROVIDER_CONFIG['cborg']['parameters']['top_p'] == 0.95
-        assert PROVIDER_CONFIG['cborg']['parameters']['seed'] == 123
+        for args in test_cases:
+            with self.subTest(args=args):
+                with patch('sys.argv', args), \
+                     self.assertRaises(ValueError):
+                    await main()
+
+    async def test_parameters_with_cborg(self):
+        """Test that parameters work with CBORG provider"""
+        with patch('sys.argv', ['engine.py', '--provider', 'cborg', 
+                              '--temperature', '0.5', '--top-p', '0.8']):
+            self.mock_input.side_effect = ['exit']
+            
+            # Set required environment variable
+            os.environ['CBORG_API_KEY'] = 'test_key'
+            
+            # Run main
+            await main()
+            
+            # Check parameters were set for CBORG
+            self.assertEqual(PROVIDER_CONFIG['cborg']['parameters']['temperature'], 0.5)
+            self.assertEqual(PROVIDER_CONFIG['cborg']['parameters']['top_p'], 0.8)
+
+if __name__ == '__main__':
+    unittest.main()

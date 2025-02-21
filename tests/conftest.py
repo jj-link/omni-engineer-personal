@@ -4,6 +4,17 @@ Test configuration and fixtures for the omni-engineer test suite.
 import pytest
 from unittest.mock import Mock, patch
 import os
+import logging
+
+def pytest_configure():
+    """Configure test environment."""
+    # Disable all logging during tests
+    logging.getLogger().setLevel(logging.ERROR)
+    
+    # Disable asyncio warnings
+    import warnings
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 @pytest.fixture
 def mock_cborg_response():

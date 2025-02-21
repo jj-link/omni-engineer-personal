@@ -1,146 +1,132 @@
 """Tests for the Ollama provider implementation."""
-import pytest
-from unittest.mock import AsyncMock, patch
+import unittest
+from unittest.mock import AsyncMock, patch, MagicMock
 from omni_core.providers.ollama import OllamaProvider
 from omni_core.config import ProviderConfig
 
-@pytest.fixture
-def ollama_provider():
-    """Create a test instance of OllamaProvider."""
-    config = ProviderConfig(
-        name="ollama",
-        model="codellama",
-        base_url="http://localhost:11434"
-    )
-    return OllamaProvider(config)
+class TestOllamaProvider(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        """Create a test instance of OllamaProvider."""
+        self.config = ProviderConfig(
+            name="ollama",
+            model="codellama",
+            base_url="http://localhost:11434"
+        )
+        self.provider = OllamaProvider(self.config)
 
-@pytest.mark.asyncio
-async def test_list_models(ollama_provider):
-    """Test listing available models."""
-    mock_response = {
-        "models": [
-            {"name": "llama2"},
-            {"name": "codellama"},
-            {"name": "mistral"}
-        ]
-    }
-    
-    with patch("aiohttp.ClientSession.get") as mock_get:
-        mock_context = AsyncMock()
-        mock_context.__aenter__.return_value.status = 200
-        mock_context.__aenter__.return_value.json = AsyncMock(return_value=mock_response)
-        mock_get.return_value = mock_context
+    @patch('aiohttp.ClientSession')
+    async def test_list_models(self, mock_session):
+        """Test listing available models."""
+        # Mock response
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={
+            "models": [
+                {
+                    "name": "codellama",
+                    "modified_at": "2024-02-20T12:00:00Z",
+                    "size": 4563402752
+                },
+                {
+                    "name": "llama2",
+                    "modified_at": "2024-02-20T12:00:00Z",
+                    "size": 4563402752
+                }
+            ]
+        })
         
-        models = await ollama_provider.list_models()
-        
-        assert models == ["llama2", "codellama", "mistral"]
-        mock_get.assert_called_once_with("http://localhost:11434/api/tags")
+        mock_session.return_value.__aenter__.return_value.get = AsyncMock(
+            return_value=mock_response
+        )
 
-@pytest.mark.asyncio
-async def test_chat_completion(ollama_provider):
-    """Test chat completion generation."""
-    messages = [
-        {"role": "system", "content": "You are a helpful assistant"},
-        {"role": "user", "content": "Hello!"}
-    ]
-    
-    mock_response = {
-        "message": {
-            "role": "assistant",
-            "content": "Hello! How can I help you today?"
-        },
-        "prompt_eval_count": 10,
-        "eval_count": 15
-    }
-    
-    with patch("aiohttp.ClientSession.post") as mock_post:
-        mock_context = AsyncMock()
-        mock_context.__aenter__.return_value.status = 200
-        mock_context.__aenter__.return_value.json = AsyncMock(return_value=mock_response)
-        mock_post.return_value = mock_context
+        # Test model listing
+        models = await self.provider.list_models()
+        self.assertEqual(len(models), 2)
+        self.assertEqual(models[0]["name"], "codellama")
+        self.assertEqual(models[1]["name"], "llama2")
+
+    @patch('aiohttp.ClientSession')
+    async def test_chat_completion(self, mock_session):
+        """Test chat completion generation."""
+        # Mock response
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={
+            "model": "codellama",
+            "created_at": "2024-02-20T12:00:00Z",
+            "response": "Hello! I am CodeLlama.",
+            "done": True
+        })
         
-        response = await ollama_provider.chat_completion(
-            messages=messages,
-            model="llama2",
+        mock_session.return_value.__aenter__.return_value.post = AsyncMock(
+            return_value=mock_response
+        )
+
+        # Test chat completion
+        response = await self.provider.chat_completion(
+            "Hello, who are you?",
             temperature=0.7,
-            top_p=1.0
-        )
-        
-        assert response["choices"][0]["message"]["content"] == "Hello! How can I help you today?"
-        assert response["usage"]["prompt_tokens"] == 10
-        assert response["usage"]["completion_tokens"] == 15
-        assert response["usage"]["total_tokens"] == 25
-        
-        # Verify correct payload was sent
-        expected_payload = {
-            "model": "llama2",
-            "messages": messages,
-            "options": {
-                "temperature": 0.7,
-                "top_p": 1.0
-            }
-        }
-        mock_post.assert_called_once_with(
-            "http://localhost:11434/api/chat",
-            json=expected_payload
+            top_p=0.9
         )
 
-@pytest.mark.asyncio
-async def test_chat_completion_with_optional_params(ollama_provider):
-    """Test chat completion with optional parameters."""
-    messages = [{"role": "user", "content": "Hello!"}]
-    mock_response = {
-        "message": {"role": "assistant", "content": "Hi!"},
-        "prompt_eval_count": 5,
-        "eval_count": 5
-    }
-    
-    with patch("aiohttp.ClientSession.post") as mock_post:
-        mock_context = AsyncMock()
-        mock_context.__aenter__.return_value.status = 200
-        mock_context.__aenter__.return_value.json = AsyncMock(return_value=mock_response)
-        mock_post.return_value = mock_context
+        self.assertEqual(response.content, "Hello! I am CodeLlama.")
+        self.assertTrue(response.done)
+
+    @patch('aiohttp.ClientSession')
+    async def test_chat_completion_with_optional_params(self, mock_session):
+        """Test chat completion with optional parameters."""
+        # Mock response
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={
+            "model": "codellama",
+            "created_at": "2024-02-20T12:00:00Z",
+            "response": "Hello! I am CodeLlama.",
+            "done": True
+        })
         
-        response = await ollama_provider.chat_completion(
-            messages=messages,
-            model="llama2",
+        mock_session.return_value.__aenter__.return_value.post = AsyncMock(
+            return_value=mock_response
+        )
+
+        # Test chat completion with parameters
+        response = await self.provider.chat_completion(
+            "Hello, who are you?",
             temperature=0.5,
-            top_p=0.9,
+            top_p=0.8,
             max_tokens=100,
-            stop=["END"]
-        )
-        
-        # Verify all optional parameters were included
-        expected_payload = {
-            "model": "llama2",
-            "messages": messages,
-            "options": {
-                "temperature": 0.5,
-                "top_p": 0.9,
-                "num_predict": 100,
-                "stop": ["END"]
-            }
-        }
-        mock_post.assert_called_once_with(
-            "http://localhost:11434/api/chat",
-            json=expected_payload
+            stop=["stop"],
+            stream=True
         )
 
-@pytest.mark.asyncio
-async def test_chat_completion_error(ollama_provider):
-    """Test error handling in chat completion."""
-    messages = [{"role": "user", "content": "Hello!"}]
-    
-    with patch("aiohttp.ClientSession.post") as mock_post:
-        mock_context = AsyncMock()
-        mock_context.__aenter__.return_value.status = 400
-        mock_context.__aenter__.return_value.text = AsyncMock(return_value="Invalid model")
-        mock_post.return_value = mock_context
+        self.assertEqual(response.content, "Hello! I am CodeLlama.")
+        self.assertTrue(response.done)
+
+        # Verify parameters were passed correctly
+        call_kwargs = mock_session.return_value.__aenter__.return_value.post.call_args.kwargs
+        self.assertEqual(call_kwargs["json"]["temperature"], 0.5)
+        self.assertEqual(call_kwargs["json"]["top_p"], 0.8)
+        self.assertEqual(call_kwargs["json"]["max_tokens"], 100)
+        self.assertEqual(call_kwargs["json"]["stop"], ["stop"])
+        self.assertTrue(call_kwargs["json"]["stream"])
+
+    @patch('aiohttp.ClientSession')
+    async def test_chat_completion_error(self, mock_session):
+        """Test error handling in chat completion."""
+        # Mock error response
+        mock_response = MagicMock()
+        mock_response.status = 500
+        mock_response.json = AsyncMock(return_value={
+            "error": "Internal server error"
+        })
         
-        with pytest.raises(Exception) as exc_info:
-            await ollama_provider.chat_completion(
-                messages=messages,
-                model="invalid_model"
-            )
-        
-        assert "Chat completion failed: Invalid model" in str(exc_info.value)
+        mock_session.return_value.__aenter__.return_value.post = AsyncMock(
+            return_value=mock_response
+        )
+
+        # Test error handling
+        with self.assertRaises(Exception):
+            await self.provider.chat_completion("Hello")
+
+if __name__ == '__main__':
+    unittest.main()

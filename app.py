@@ -1,6 +1,7 @@
-from flask import Flask, render_template, request, jsonify, url_for, session
+from flask import Flask, render_template, request, jsonify, url_for, session, json
 from ce3 import Assistant
 import os
+import subprocess
 from werkzeug.utils import secure_filename
 import base64
 from config import Config
@@ -17,9 +18,11 @@ print(f"Current provider: {os.getenv('CBORG_API_KEY', 'not set')}")
 app = Flask(__name__, static_folder='static')
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-app.config['SECRET_KEY'] = os.urandom(24)  # For session management
+app.config['SECRET_KEY'] = 'dev'  # Fixed key for development
 
 # Provider configuration
+default_provider = 'cborg'  # Define default provider
+
 PROVIDER_CONFIG = {
     'cborg': {
         'base_url': 'https://api.cborg.lbl.gov',
@@ -49,32 +52,117 @@ PROVIDER_CONFIG = {
             
             # Google Models
             'google/gemini-pro',
-            'google/gemini-flash',
-            
-            # Other Models
-            'wolfram/alpha'
+            'google/gemini-pro-vision',
+            'google/gemini-ultra',
+            'google/gemini-ultra-vision'
         ],
-        'requires_key': True,
         'parameters': {
-            # Using temperature 0 for code tasks as recommended by CBORG docs
-            # Lower temperature = more deterministic, better for code
-            'temperature': 0.0,
-            # Keep top_p high to ensure model has access to all relevant tokens
-            # Temperature of 0 will still make selection deterministic
+            'temperature': 0.7,
             'top_p': 0.9,
-            'seed': None
-        }
+            'max_tokens': 2048,
+            'stop': None
+        },
+        'requires_key': True,
+        'api_key_env': 'CBORG_API_KEY'
     },
     'ollama': {
-        'base_url': 'http://localhost:11434',
-        'default_model': 'codellama',
-        'available_models': ['codellama', 'llama2', 'mistral'],
-        'requires_key': False,
+        'default_model': 'codellama:latest',
+        'available_models': [],  # Will be populated dynamically
         'parameters': {
-            'temperature': 0.0,
+            'temperature': 0.7,
             'top_p': 0.9,
-            'seed': None
-        }
+            'max_tokens': 2048,
+            'stop': None
+        },
+        'requires_key': False
+    }
+}
+
+# Model metadata
+MODEL_METADATA = {
+    'lbl/cborg-chat:latest': {
+        'description': 'Berkeley Lab-hosted chat model based on Llama 3.3 70B + Vision',
+        'capabilities': ['chat', 'vision']
+    },
+    'lbl/cborg-coder:latest': {
+        'description': 'Berkeley Lab-hosted chat model for code assistance based on Qwen Coder 2.5',
+        'capabilities': ['code', 'chat']
+    },
+    'lbl/cborg-vision:latest': {
+        'description': 'Lab-hosted multi-modal model for image analysis Qwen 72B Vision',
+        'capabilities': ['vision', 'chat']
+    },
+    'lbl/cborg-deepthought:latest': {
+        'description': 'Lab-hosted deep reasoning model based on DeepSeekR1-Distill Llama 70B (experimental)',
+        'capabilities': ['chat']
+    },
+    'lbl/cborg-pdfbot': {
+        'description': 'Specialized model for PDF document analysis and Q&A',
+        'capabilities': ['chat', 'document']
+    },
+    'lbl/llama-3': {
+        'description': 'Base Llama 3 model with general chat capabilities',
+        'capabilities': ['chat']
+    },
+    'lbl/qwen-coder': {
+        'description': 'Specialized code assistance model based on Qwen',
+        'capabilities': ['code', 'chat']
+    },
+    'lbl/qwen-vision': {
+        'description': 'Vision-capable model based on Qwen architecture',
+        'capabilities': ['vision', 'chat']
+    },
+    'openai/gpt-4o': {
+        'description': 'The latest high-quality multi-modal model from OpenAI for chat, coding and more',
+        'capabilities': ['code', 'chat', 'vision']
+    },
+    'openai/gpt-4o-mini': {
+        'description': 'Lightweight, low-cost multi-modal model from OpenAI for chat and vision',
+        'capabilities': ['chat', 'vision']
+    },
+    'openai/o1': {
+        'description': 'Latest release of deep reasoning model from OpenAI for chat, coding and analysis',
+        'capabilities': ['code', 'chat']
+    },
+    'openai/o1-mini': {
+        'description': 'Lightweight reasoning model from OpenAI for chat, coding and analysis',
+        'capabilities': ['code', 'chat']
+    },
+    'openai/o3-mini': {
+        'description': 'Latest lightweight reasoning model from OpenAI for chat, coding and analysis',
+        'capabilities': ['code', 'chat']
+    },
+    'google/gemini-pro': {
+        'description': 'Advanced model for general performance across a wide range of tasks',
+        'capabilities': ['chat', 'code']
+    },
+    'google/gemini-pro-vision': {
+        'description': 'Vision-capable model for general performance across a wide range of tasks',
+        'capabilities': ['chat', 'code', 'vision']
+    },
+    'google/gemini-ultra': {
+        'description': 'High-performance model for demanding tasks',
+        'capabilities': ['chat', 'code']
+    },
+    'google/gemini-ultra-vision': {
+        'description': 'Vision-capable high-performance model for demanding tasks',
+        'capabilities': ['chat', 'code', 'vision']
+    },
+    'anthropic/claude-haiku': {
+        'description': 'Fast and affordable model, including vision capabilities',
+        'capabilities': ['chat', 'vision', 'fast']
+    },
+    'anthropic/claude-sonnet': {
+        'description': 'Latest version of cost-optimized model with excellent reasoning and coding',
+        'capabilities': ['chat', 'code']
+    },
+    'anthropic/claude-opus': {
+        'description': 'Advanced model for nuanced reasoning, math, coding and more',
+        'capabilities': ['chat', 'code', 'math']
+    },
+    'wolfram/alpha': {
+        'description': 'Knowledge base query source',
+        'capabilities': ['query']
     }
 }
 
@@ -85,10 +173,14 @@ default_provider = 'cborg'  # or 'ollama' based on your preference
 def initialize_session():
     if 'current_provider' not in session:
         session['current_provider'] = default_provider
+        print(f"[DEBUG] Initialized session with provider: {default_provider}")
     if 'current_model' not in session:
         session['current_model'] = PROVIDER_CONFIG[session['current_provider']]['default_model']
+        print(f"[DEBUG] Initialized session with model: {session['current_model']}")
 
+# Initialize assistant with default settings
 assistant = Assistant(provider=default_provider)
+assistant.model = PROVIDER_CONFIG[default_provider]['default_model']
 current_provider = default_provider
 current_parameters = PROVIDER_CONFIG[default_provider]['parameters'].copy()
 
@@ -99,9 +191,13 @@ def home():
 @app.route('/providers', methods=['GET'])
 def get_providers():
     """Get available providers"""
+    providers = list(PROVIDER_CONFIG.keys())
+    current = session.get('current_provider', default_provider)
+    print(f"[DEBUG] Available providers: {providers}")
+    print(f"[DEBUG] Current provider: {current}")
     return jsonify({
-        'providers': list(PROVIDER_CONFIG.keys()),
-        'current_provider': session.get('current_provider', 'ollama')
+        'providers': providers,
+        'current_provider': current
     })
 
 @app.route('/select_provider', methods=['POST'])
@@ -109,6 +205,10 @@ def select_provider():
     """Select a provider"""
     data = request.json
     provider = data.get('provider')
+    print(f"[DEBUG] select_provider called with provider: {provider}")
+    print(f"[DEBUG] Current session before update: {dict(session)}")
+    print(f"[DEBUG] Current request: {request}")
+    print(f"[DEBUG] Current request headers: {dict(request.headers)}")
     
     if provider not in PROVIDER_CONFIG:
         return jsonify({
@@ -117,7 +217,7 @@ def select_provider():
         }), 400
     
     # Check if provider requires API key
-    if PROVIDER_CONFIG[provider]['requires_key']:
+    if PROVIDER_CONFIG[provider].get('requires_key', False):
         api_key = os.getenv(PROVIDER_CONFIG[provider]['api_key_env'])
         if not api_key:
             return jsonify({
@@ -127,6 +227,7 @@ def select_provider():
     
     # Store provider in session
     session['current_provider'] = provider
+    print(f"[DEBUG] Session after update: {dict(session)}")
     
     # Reset parameters to provider defaults
     session['current_parameters'] = PROVIDER_CONFIG[provider]['parameters'].copy()
@@ -139,135 +240,64 @@ def select_provider():
 
 @app.route('/models', methods=['GET'])
 def get_models():
-    """Get available models for the current provider."""
+    """Get available models from all providers."""
     try:
-        provider = session.get('current_provider', default_provider)
-        print(f"Current provider: {provider}")  # Debug log
+        # Initialize response data
+        model_groups = {}
+        capabilities = {}
+        descriptions = {}
         
-        if provider not in PROVIDER_CONFIG:
-            raise ValueError(f"Invalid provider: {provider}")
+        # Get CBORG models
+        cborg_models = PROVIDER_CONFIG['cborg']['available_models']
+        for model in cborg_models:
+            prefix = model.split('/')[0]
+            if prefix not in model_groups:
+                model_groups[prefix] = []
+            model_groups[prefix].append(model)
+            
+            # Add metadata if available
+            if model in MODEL_METADATA:
+                meta = MODEL_METADATA[model]
+                capabilities[model] = meta.get('capabilities', [])
+                descriptions[model] = meta.get('description', '')
         
-        models = PROVIDER_CONFIG[provider]['available_models']
-        print(f"Available models: {len(models)}")  # Debug log
+        # Get Ollama models
+        try:
+            result = subprocess.run(['ollama', 'list'], capture_output=True, text=True)
+            if result.returncode == 0:
+                if 'ollama' not in model_groups:
+                    model_groups['ollama'] = []
+                
+                for line in result.stdout.splitlines()[1:]:  # Skip header
+                    if line.strip():
+                        parts = line.split()
+                        if len(parts) >= 4:
+                            name = parts[0]
+                            size = parts[2]
+                            modified = ' '.join(parts[3:])
+                            
+                            # Add to model groups
+                            model_groups['ollama'].append(name)
+                            
+                            # Add metadata
+                            capabilities[name] = ['local', 'chat']  # Default capabilities
+                            descriptions[name] = f"Local Ollama model ({size}, {modified})"
+        except FileNotFoundError:
+            print("[INFO] Ollama not installed")
+        except Exception as e:
+            print(f"[ERROR] Error listing Ollama models: {str(e)}")
         
-        current_model = session.get('current_model', PROVIDER_CONFIG[provider]['default_model'])
-        print(f"Current model: {current_model}")  # Debug log
-        
-        # Model metadata mapping
-        model_metadata = {
-            'lbl/cborg-chat:latest': {
-                'description': 'Berkeley Lab-hosted chat model based on Llama 3.3 70B + Vision',
-                'capabilities': ['chat', 'vision']
-            },
-            'lbl/cborg-coder:latest': {
-                'description': 'Berkeley Lab-hosted chat model for code assistance based on Qwen Coder 2.5',
-                'capabilities': ['code', 'chat']
-            },
-            'lbl/cborg-vision:latest': {
-                'description': 'Lab-hosted multi-modal model for image analysis Qwen 72B Vision',
-                'capabilities': ['vision', 'chat']
-            },
-            'lbl/cborg-deepthought:latest': {
-                'description': 'Lab-hosted deep reasoning model based on DeepSeekR1-Distill Llama 70B (experimental)',
-                'capabilities': ['chat']
-            },
-            'lbl/cborg-pdfbot': {
-                'description': 'Specialized model for PDF document analysis and Q&A',
-                'capabilities': ['chat', 'document']
-            },
-            'lbl/llama-3': {
-                'description': 'Base Llama 3 model with general chat capabilities',
-                'capabilities': ['chat']
-            },
-            'lbl/qwen-coder': {
-                'description': 'Specialized code assistance model based on Qwen',
-                'capabilities': ['code', 'chat']
-            },
-            'lbl/qwen-vision': {
-                'description': 'Vision-capable model based on Qwen architecture',
-                'capabilities': ['vision', 'chat']
-            },
-            'openai/gpt-4o': {
-                'description': 'The latest high-quality multi-modal model from OpenAI for chat, coding and more',
-                'capabilities': ['code', 'chat', 'vision']
-            },
-            'openai/gpt-4o-mini': {
-                'description': 'Lightweight, low-cost multi-modal model from OpenAI for chat and vision',
-                'capabilities': ['chat', 'vision']
-            },
-            'openai/o1': {
-                'description': 'Latest release of deep reasoning model from OpenAI for chat, coding and analysis',
-                'capabilities': ['code', 'chat']
-            },
-            'openai/o1-mini': {
-                'description': 'Lightweight reasoning model from OpenAI for chat, coding and analysis',
-                'capabilities': ['code', 'chat']
-            },
-            'openai/o3-mini': {
-                'description': 'Latest lightweight reasoning model from OpenAI for chat, coding and analysis',
-                'capabilities': ['code', 'chat']
-            },
-            'google/gemini-flash': {
-                'description': 'Lightweight model with vision, optimized for speed and efficiency',
-                'capabilities': ['chat', 'vision', 'fast']
-            },
-            'google/gemini-pro': {
-                'description': 'Advanced model for general performance across a wide range of tasks',
-                'capabilities': ['chat', 'code']
-            },
-            'anthropic/claude-haiku': {
-                'description': 'Fast and affordable model, including vision capabilities',
-                'capabilities': ['chat', 'vision', 'fast']
-            },
-            'anthropic/claude-sonnet': {
-                'description': 'Latest version of cost-optimized model with excellent reasoning and coding',
-                'capabilities': ['chat', 'code']
-            },
-            'anthropic/claude-opus': {
-                'description': 'Advanced model for nuanced reasoning, math, coding and more',
-                'capabilities': ['chat', 'code', 'math']
-            },
-            'wolfram/alpha': {
-                'description': 'Knowledge base query source',
-                'capabilities': ['query']
-            }
-        }
-        
-        # Default metadata for models without specific entries
-        def get_default_metadata(model_id):
-            return {
-                'description': 'N/A',
-                'capabilities': ['chat']
-            }
-        
-        # Build response data
-        response_data = {
-            'models': models,
-            'current_model': current_model,
-            'default_model': PROVIDER_CONFIG[provider]['default_model'],
-            'descriptions': {},
-            'capabilities': {}
-        }
-        
-        # Add metadata for each model
-        for model in models:
-            metadata = model_metadata.get(model, get_default_metadata(model))
-            response_data['descriptions'][model] = metadata['description']
-            response_data['capabilities'][model] = metadata['capabilities']
-        
-        print(f"Response data ready: {len(response_data['models'])} models")  # Debug log
-        return jsonify(response_data)
-        
-    except Exception as e:
-        print(f"Error in get_models: {str(e)}")  # Debug log
         return jsonify({
-            'error': f'Failed to fetch models: {str(e)}',
-            'models': [],
-            'current_model': None,
-            'default_model': None,
-            'descriptions': {},
-            'capabilities': {}
-        }), 500
+            'format': 'grouped',
+            'model_groups': model_groups,
+            'capabilities': capabilities,
+            'descriptions': descriptions,
+            'current_model': session.get('current_model')
+        })
+            
+    except Exception as e:
+        print(f"[ERROR] Error in get_models: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/switch_model', methods=['POST'])
 def switch_model():
@@ -280,16 +310,44 @@ def switch_model():
             }), 400
         
         model = data['model']
-        provider = session.get('current_provider', default_provider)
+        
+        # Determine provider from model name
+        if '/' in model:
+            provider = model.split('/')[0]  # e.g. 'lbl/cborg-chat:latest' -> 'lbl'
+        else:
+            provider = 'ollama'  # Ollama models don't have a prefix
         
         # Validate provider
-        if provider not in PROVIDER_CONFIG:
+        if provider not in PROVIDER_CONFIG and provider not in ['lbl', 'openai', 'anthropic', 'google', 'wolfram']:
             return jsonify({
                 'error': f'Invalid provider: {provider}'
             }), 400
         
         # Validate model availability
-        if model not in PROVIDER_CONFIG[provider]['available_models']:
+        if provider == 'ollama':
+            try:
+                # Get list of Ollama models
+                result = subprocess.run(['ollama', 'list'], capture_output=True, text=True)
+                if result.returncode == 0:
+                    # Parse model names from Ollama list output
+                    models = []
+                    for line in result.stdout.splitlines()[1:]:  # Skip header
+                        if line.strip():
+                            model_name = line.split()[0]  # First column is model name
+                            models.append(model_name)
+                else:
+                    print(f"Ollama list error: {result.stderr}")
+                    return jsonify({'error': 'Failed to list Ollama models'}), 500
+            except FileNotFoundError:
+                print("Ollama not installed")
+                return jsonify({'error': 'Ollama not installed'}), 500
+            except Exception as e:
+                print(f"Error listing Ollama models: {str(e)}")
+                return jsonify({'error': 'Failed to list Ollama models'}), 500
+        else:
+            models = PROVIDER_CONFIG['cborg']['available_models']
+        
+        if model not in models:
             return jsonify({
                 'error': f'Model {model} is not available for provider {provider}'
             }), 400
@@ -298,7 +356,8 @@ def switch_model():
         session['current_model'] = model
         
         # Update assistant's model
-        assistant.model = model
+        if '/' in model:  # CBORG model
+            assistant.model = model
         
         return jsonify({
             'success': True,
@@ -370,46 +429,56 @@ def debug_provider():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    data = request.json
-    if not data or 'message' not in data:
-        return jsonify({'error': 'No message provided'}), 400
-
-    message = data['message']
-    image_data = data.get('image_data')
-    media_type = data.get('media_type')
-
     try:
-        # Get current model and remove provider prefix
-        current_model = session.get('current_model')
-        if current_model:
-            if current_model.startswith('CBORG: '):
-                model_name = current_model.replace('CBORG: ', '')
-                # Model name already includes :chat suffix
-            elif current_model.startswith('OLLAMA: '):
-                model_name = current_model.replace('OLLAMA: ', '')
-            else:
-                model_name = current_model
-        else:
-            # Use default model based on provider
-            provider = session.get('current_provider', default_provider)
-            if provider == 'cborg':
-                model_name = PROVIDER_CONFIG['cborg']['default_model']  # Already includes :chat
-            else:
-                model_name = PROVIDER_CONFIG['ollama']['default_model']
+        data = request.get_json()
+        if not data or 'message' not in data:
+            return jsonify({'error': 'No message provided'}), 400
 
-        # Update the model in the Assistant
-        assistant.model = model_name
+        message = data['message']
+        settings = data.get('settings', {})
+        
+        try:
+            current_model = session.get('current_model')
+            if not current_model:
+                current_model = PROVIDER_CONFIG['cborg']['default_model']
+                session['current_model'] = current_model
+            
+            print(f"[DEBUG] Using model: {current_model}")
+            
+            # Determine provider from model name
+            provider = 'cborg' if '/' in current_model else 'ollama'
+            print(f"[DEBUG] Using provider: {provider}")
+            
+            try:
+                # Update the assistant's provider and model
+                if assistant.provider != provider:
+                    assistant.provider = provider
+                assistant.model = current_model
 
-        if image_data and media_type:
-            response = assistant.chat_with_image(message, image_data, media_type)
-        else:
-            response = assistant.chat(message)
+                # Update temperature if provided
+                if settings.get('temperature'):
+                    assistant.temperature = float(settings['temperature'])
 
-        return jsonify({'response': response})
+                # Handle image data if present
+                if 'image_data' in data and 'media_type' in data:
+                    response = assistant.chat_with_image(message, data['image_data'], data['media_type'])
+                else:
+                    response = assistant.chat(message)
 
+                print(f"[DEBUG] Response received from {provider}")
+                return jsonify({'response': response})
+                
+            except Exception as e:
+                print(f"[ERROR] {provider} error: {str(e)}")
+                return jsonify({'error': f"{provider} error: {str(e)}"}), 500
+                
+        except Exception as e:
+            print(f"[ERROR] Error in chat endpoint: {str(e)}")
+            return jsonify({'error': f"Error in chat endpoint: {str(e)}"}), 500
+            
     except Exception as e:
-        print(f"Error in chat: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        print(f"[ERROR] Error parsing request: {str(e)}")
+        return jsonify({'error': f"Error parsing request: {str(e)}"}), 500
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -454,4 +523,4 @@ def reset():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=False)
+    app.run(debug=True)  # Enable debug mode for better error messages

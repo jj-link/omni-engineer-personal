@@ -1,107 +1,119 @@
 // Model selection functionality
-let modelSelector;
-
 async function initializeModelSelector() {
     try {
-        console.log('Fetching models...');  // Debug log
-        const response = await fetch('/models');
+        console.log('Fetching models...');
+        const response = await fetch('/models', {
+            credentials: 'same-origin',  // Include cookies
+        });
         
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         
         const data = await response.json();
-        console.log('Models response:', data);  // Debug log
+        console.log('Models response:', data);
         
         if (data.error) {
             throw new Error(data.error);
         }
         
-        // Group models by provider
-        const modelsByProvider = new Map();
-        data.models.forEach(model => {
-            const [provider] = model.split('/');
-            if (!modelsByProvider.has(provider)) {
-                modelsByProvider.set(provider, []);
-            }
-            modelsByProvider.get(provider).push({
-                id: model,
-                description: data.descriptions?.[model] || 'No description available',
-                capabilities: data.capabilities?.[model] || []
-            });
-        });
-        
-        console.log('Models grouped by provider:', modelsByProvider);  // Debug log
-
-        // Initialize model selector
-        const selectorElement = document.getElementById('model-selector');
-        if (!selectorElement) {
+        const element = document.getElementById('model-selector');
+        if (!element) {
             throw new Error('Model selector element not found');
         }
-        
-        modelSelector = new ModelSelector(selectorElement, {
-            onModelSelect: async (model) => {
-                try {
-                    console.log('Model selected:', model);  // Debug log
-                    await switchModel(model.id);
-                } catch (error) {
-                    console.error('Error switching model:', error);
-                    appendMessage(`Failed to switch model: ${error.message}`, false);
-                }
-            }
-        });
 
-        modelSelector.providers = modelsByProvider;
+        // Clear existing content
+        element.innerHTML = '';
+
+        // Add current model display
+        const currentModelDiv = document.createElement('div');
+        currentModelDiv.className = 'current-model';
+        currentModelDiv.innerHTML = `
+            <div class="label">Current Model</div>
+            <div class="value">${data.current_model || 'None selected'}</div>
+        `;
+        element.appendChild(currentModelDiv);
+
+        // Add provider sections
+        const groups = data.model_groups || {};
+        Object.entries(groups).forEach(([provider, models]) => {
+            const section = document.createElement('div');
+            section.className = 'provider-section';
+            
+            const header = document.createElement('div');
+            header.className = 'provider-header';
+            header.innerHTML = `
+                <img src="/static/img/provider-icon.png" alt="${provider}" class="provider-icon">
+                <span>${provider}</span>
+                <span class="expand-icon">+</span>
+            `;
+            
+            const modelList = document.createElement('div');
+            modelList.className = 'model-list';
+            modelList.style.display = 'none';
+            
+            models.forEach(model => {
+                const modelItem = document.createElement('div');
+                modelItem.className = 'model-item';
+                modelItem.innerHTML = `
+                    <img src="/static/img/model-icon.png" alt="${model}" class="model-icon">
+                    <span class="model-name">${model}</span>
+                `;
+                modelItem.title = data.descriptions?.[model] || '';
+                modelItem.addEventListener('click', () => selectModel(model));
+                modelList.appendChild(modelItem);
+            });
+            
+            header.addEventListener('click', () => {
+                const isExpanded = modelList.style.display !== 'none';
+                modelList.style.display = isExpanded ? 'none' : 'block';
+                header.querySelector('.expand-icon').textContent = isExpanded ? '+' : '-';
+            });
+            
+            section.appendChild(header);
+            section.appendChild(modelList);
+            element.appendChild(section);
+        });
         
-        // Set current model if available
-        if (data.current_model) {
-            const currentProvider = data.current_model.split('/')[0];
-            const providerModels = modelsByProvider.get(currentProvider);
-            const currentModelData = providerModels?.find(m => m.id === data.current_model);
-            if (currentModelData) {
-                modelSelector.selectedModel = currentModelData;
-            }
-        }
-        
-        modelSelector.render();
-        console.log('Model selector initialized');  // Debug log
     } catch (error) {
         console.error('Error initializing model selector:', error);
-        appendMessage('Error loading models. Please try refreshing the page.', false);
     }
 }
 
-async function switchModel(model) {
+async function selectModel(model) {
     try {
+        console.log('Switching to model:', model);
         const response = await fetch('/switch_model', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ model }),
+            credentials: 'same-origin',  // Include cookies
+            body: JSON.stringify({ model })
         });
         
         const data = await response.json();
-        if (!data.success) {
+        
+        if (!response.ok) {
             throw new Error(data.error || 'Failed to switch model');
         }
         
-        appendMessage(`Switched to model: ${model}`, false);
+        // Update current model display
+        const currentModelValue = document.querySelector('.current-model .value');
+        if (currentModelValue) {
+            currentModelValue.textContent = model;
+        }
+        
+        console.log('Successfully switched to model:', model);
         
     } catch (error) {
         console.error('Error switching model:', error);
-        appendMessage(`Failed to switch model: ${error.message}`, false);
-        throw error;
+        alert('Failed to switch model: ' + error.message);
     }
 }
 
-// Initialize everything when page loads
-document.addEventListener('DOMContentLoaded', () => {
-    initializeModelSelector();
-});
-
-let currentImageData = null;
-let currentMediaType = null;
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', initializeModelSelector);
 
 // Auto-resize textarea
 const textarea = document.getElementById('message-input');
@@ -168,6 +180,7 @@ document.getElementById('file-input').addEventListener('change', async (e) => {
         try {
             const response = await fetch('/upload', {
                 method: 'POST',
+                credentials: 'same-origin',  // Include cookies
                 body: formData
             });
             const data = await response.json();
@@ -312,6 +325,7 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
             headers: {
                 'Content-Type': 'application/json'
             },
+            credentials: 'same-origin',  // Include cookies
             body: JSON.stringify({
                 message: message,
                 image: currentImageData  // This will be null if no image is selected
@@ -371,7 +385,8 @@ window.addEventListener('load', async () => {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
-            }
+            },
+            credentials: 'same-origin',  // Include cookies
         });
         
         if (!response.ok) {
@@ -406,3 +421,6 @@ window.addEventListener('load', async () => {
         console.error('Error resetting conversation:', error);
     }
 }); 
+
+let currentImageData = null;
+let currentMediaType = null;

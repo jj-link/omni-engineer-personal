@@ -1,6 +1,7 @@
 """Tests for command line interface."""
 
-import pytest
+import unittest
+from unittest.mock import patch
 from argparse import ArgumentParser, Namespace, ArgumentTypeError
 from omni_core.cli import (
     parse_args,
@@ -11,138 +12,146 @@ from omni_core.cli import (
     CliConfig
 )
 
-def test_validate_temperature():
-    """Test temperature validation."""
-    # Valid temperatures
-    assert validate_temperature("0.0") == 0.0
-    assert validate_temperature("0.5") == 0.5
-    assert validate_temperature("1.0") == 1.0
-    
-    # Invalid temperatures
-    with pytest.raises(ArgumentTypeError):
-        validate_temperature("-0.1")
-    with pytest.raises(ArgumentTypeError):
-        validate_temperature("1.1")
-    with pytest.raises(ArgumentTypeError):
-        validate_temperature("invalid")
+class TestCLI(unittest.TestCase):
+    def test_validate_temperature(self):
+        """Test temperature validation."""
+        # Valid temperatures
+        self.assertEqual(validate_temperature("0.0"), 0.0)
+        self.assertEqual(validate_temperature("0.5"), 0.5)
+        self.assertEqual(validate_temperature("1.0"), 1.0)
+        
+        # Invalid temperatures
+        with self.assertRaises(ArgumentTypeError):
+            validate_temperature("-0.1")
+        with self.assertRaises(ArgumentTypeError):
+            validate_temperature("1.1")
+        with self.assertRaises(ArgumentTypeError):
+            validate_temperature("invalid")
 
-def test_validate_top_p():
-    """Test top-p validation."""
-    # Valid top-p values
-    assert validate_top_p("0.0") == 0.0
-    assert validate_top_p("0.5") == 0.5
-    assert validate_top_p("1.0") == 1.0
-    
-    # Invalid top-p values
-    with pytest.raises(ArgumentTypeError):
-        validate_top_p("-0.1")
-    with pytest.raises(ArgumentTypeError):
-        validate_top_p("1.1")
-    with pytest.raises(ArgumentTypeError):
-        validate_top_p("invalid")
+    def test_validate_top_p(self):
+        """Test top-p validation."""
+        # Valid top-p values
+        self.assertEqual(validate_top_p("0.0"), 0.0)
+        self.assertEqual(validate_top_p("0.5"), 0.5)
+        self.assertEqual(validate_top_p("1.0"), 1.0)
+        
+        # Invalid top-p values
+        with self.assertRaises(ArgumentTypeError):
+            validate_top_p("-0.1")
+        with self.assertRaises(ArgumentTypeError):
+            validate_top_p("1.1")
+        with self.assertRaises(ArgumentTypeError):
+            validate_top_p("invalid")
 
-def test_validate_provider():
-    """Test provider validation."""
-    # Valid provider
-    assert validate_provider("ollama") == "ollama"
-    assert validate_provider("cborg") == "cborg"
-    
-    # Invalid provider
-    with pytest.raises(ArgumentTypeError):
-        validate_provider("invalid")
+    def test_validate_provider(self):
+        """Test provider validation."""
+        # Valid providers
+        self.assertEqual(validate_provider("cborg"), "cborg")
+        self.assertEqual(validate_provider("ollama"), "ollama")
+        
+        # Invalid provider
+        with self.assertRaises(ArgumentTypeError):
+            validate_provider("invalid")
 
-def test_cli_config_defaults(monkeypatch):
-    """Test CLI configuration with default values."""
-    test_args = ["--provider", "ollama", "--model", "codellama"]
-    monkeypatch.setattr("sys.argv", ["omni-engineer"] + test_args)
-    
-    config = parse_args()
-    assert isinstance(config, CliConfig)
-    assert config.provider == "ollama"
-    assert config.model == "codellama"
-    assert config.temperature == 0.7  # Default
-    assert config.top_p == 0.9  # Default
-    assert config.seed is None  # Default
-    assert config.max_tokens is None  # Default
-    assert config.system_prompt is None  # Default
-    assert config.auto_mode is None  # Default
+    def test_cli_config_defaults(self):
+        """Test CLI configuration with default values."""
+        with patch('sys.argv', ['script.py', 'prompt']):
+            args = parse_args()
+            config = CliConfig.from_args(args)
+            
+            # Check default values
+            self.assertEqual(config.prompt, "prompt")
+            self.assertEqual(config.provider, "ollama")
+            self.assertEqual(config.model, "codellama:latest")
+            self.assertEqual(config.temperature, 0.7)
+            self.assertEqual(config.top_p, 1.0)
+            self.assertFalse(config.stream)
 
-def test_cli_config_all_args(monkeypatch):
-    """Test CLI configuration with all arguments specified."""
-    test_args = [
-        "--provider", "cborg",
-        "--model", "lbl/cborg-coder:latest",
-        "--temperature", "0.8",
-        "--top-p", "0.95",
-        "--seed", "42",
-        "--max-tokens", "1000",
-        "--system-prompt", "Custom prompt",
-        "--auto-mode", "5"
-    ]
-    monkeypatch.setattr("sys.argv", ["omni-engineer"] + test_args)
-    
-    config = parse_args()
-    assert isinstance(config, CliConfig)
-    assert config.provider == "cborg"
-    assert config.model == "lbl/cborg-coder:latest"
-    assert config.temperature == 0.8
-    assert config.top_p == 0.95
-    assert config.seed == 42
-    assert config.max_tokens == 1000
-    assert config.system_prompt == "Custom prompt"
-    assert config.auto_mode == 5
+    def test_cli_config_all_args(self):
+        """Test CLI configuration with all arguments specified."""
+        test_args = [
+            'script.py',
+            'test prompt',
+            '--provider', 'cborg',
+            '--model', 'lbl/cborg-coder:custom',
+            '--temperature', '0.5',
+            '--top-p', '0.9',
+            '--stream'
+        ]
+        
+        with patch('sys.argv', test_args):
+            args = parse_args()
+            config = CliConfig.from_args(args)
+            
+            # Check all values
+            self.assertEqual(config.prompt, "test prompt")
+            self.assertEqual(config.provider, "cborg")
+            self.assertEqual(config.model, "lbl/cborg-coder:custom")
+            self.assertEqual(config.temperature, 0.5)
+            self.assertEqual(config.top_p, 0.9)
+            self.assertTrue(config.stream)
 
-def test_get_cli_config(monkeypatch):
-    """Test get_cli_config returns correct dictionary format."""
-    test_args = [
-        "--provider", "ollama",
-        "--model", "codellama",
-        "--temperature", "0.8",
-        "--seed", "42"
-    ]
-    monkeypatch.setattr("sys.argv", ["omni-engineer"] + test_args)
-    
-    config = get_cli_config()
-    assert isinstance(config, dict)
-    assert config["provider"] == "ollama"
-    assert config["model"] == "codellama"
-    assert config["parameters"]["temperature"] == 0.8
-    assert config["parameters"]["seed"] == 42
-    assert config["system_prompt"] is None
-    assert config["auto_mode"] is None
+    def test_get_cli_config(self):
+        """Test get_cli_config returns correct dictionary format."""
+        test_args = [
+            'script.py',
+            'test prompt',
+            '--provider', 'cborg',
+            '--model', 'lbl/cborg-coder:custom',
+            '--temperature', '0.5',
+            '--top-p', '0.9',
+            '--stream'
+        ]
+        
+        with patch('sys.argv', test_args):
+            config_dict = get_cli_config()
+            
+            # Check dictionary structure
+            self.assertIn('prompt', config_dict)
+            self.assertIn('provider', config_dict)
+            self.assertIn('model', config_dict)
+            self.assertIn('parameters', config_dict)
+            
+            # Check values
+            self.assertEqual(config_dict['prompt'], "test prompt")
+            self.assertEqual(config_dict['provider'], "cborg")
+            self.assertEqual(config_dict['model'], "lbl/cborg-coder:custom")
+            self.assertEqual(config_dict['parameters']['temperature'], 0.5)
+            self.assertEqual(config_dict['parameters']['top_p'], 0.9)
+            self.assertTrue(config_dict['parameters']['stream'])
 
-def test_missing_required_args(monkeypatch):
-    """Test error handling for missing required arguments."""
-    # Missing model
-    test_args = ["--provider", "ollama"]
-    monkeypatch.setattr("sys.argv", ["omni-engineer"] + test_args)
-    with pytest.raises(SystemExit):
-        parse_args()
-    
-    # Missing provider
-    test_args = ["--model", "codellama"]
-    monkeypatch.setattr("sys.argv", ["omni-engineer"] + test_args)
-    with pytest.raises(SystemExit):
-        parse_args()
+    def test_missing_required_args(self):
+        """Test error handling for missing required arguments."""
+        test_cases = [
+            ['script.py'],  # Missing prompt
+            ['script.py', '--provider', 'cborg'],  # Missing prompt with provider
+            ['script.py', '--model', 'test-model']  # Missing prompt with model
+        ]
+        
+        for args in test_cases:
+            with patch('sys.argv', args), self.assertRaises(SystemExit):
+                parse_args()
 
-def test_invalid_args(monkeypatch):
-    """Test error handling for invalid argument values."""
-    base_args = ["--model", "codellama"]
-    
-    # Invalid provider
-    test_args = ["--provider", "invalid"] + base_args
-    monkeypatch.setattr("sys.argv", ["omni-engineer"] + test_args)
-    with pytest.raises(SystemExit):
-        parse_args()
-    
-    # Invalid temperature
-    test_args = ["--provider", "ollama", "--temperature", "2.0"] + base_args
-    monkeypatch.setattr("sys.argv", ["omni-engineer"] + test_args)
-    with pytest.raises(SystemExit):
-        parse_args()
-    
-    # Invalid top-p
-    test_args = ["--provider", "ollama", "--top-p", "-1.0"] + base_args
-    monkeypatch.setattr("sys.argv", ["omni-engineer"] + test_args)
-    with pytest.raises(SystemExit):
-        parse_args()
+    def test_invalid_args(self):
+        """Test error handling for invalid argument values."""
+        test_cases = [
+            # Invalid temperature
+            ['script.py', 'prompt', '--temperature', '2.0'],
+            
+            # Invalid top-p
+            ['script.py', 'prompt', '--top-p', '-0.1'],
+            
+            # Invalid provider
+            ['script.py', 'prompt', '--provider', 'invalid'],
+            
+            # Invalid combinations
+            ['script.py', 'prompt', '--provider', 'cborg', '--temperature', 'invalid'],
+            ['script.py', 'prompt', '--top-p', 'not-a-number']
+        ]
+        
+        for args in test_cases:
+            with patch('sys.argv', args), self.assertRaises((SystemExit, ArgumentTypeError)):
+                parse_args()
+
+if __name__ == '__main__':
+    unittest.main()

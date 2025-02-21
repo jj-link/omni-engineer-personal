@@ -76,7 +76,7 @@ Add CBORG support to the existing engine.py while maintaining all current functi
         - [ ] Show estimated tokens per message
       - [ ] Add context management options:
         - [ ] Trim older messages when nearing limit
-        - [ ] When context reaches limit, create a condensed version of the conversation history, that is then used as the context for a new conversation
+        - [ ] When context reaches limit, create a condensed version of the conversation history, that can function well as the context for a new conversation
 
 ## Backend Changes Required
 - [ ] Enhance Ollama integration:
@@ -106,7 +106,7 @@ Add CBORG support to the existing engine.py while maintaining all current functi
           'default_model': 'lbl/cborg-coder:latest',
           'requires_key': True,
           'parameters': {
-              'temperature': 0.7,
+              'temperature': 0.0,
               'top_p': 0.9,
               'seed': None
           }

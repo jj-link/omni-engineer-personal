@@ -53,6 +53,33 @@ code {
 }
 
 /* Model selector styles */
+.model-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 0.5rem;
+}
+
+.model-selector select {
+    padding: 0.5rem;
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    background: white;
+    width: 100%;
+}
+
+.model-selector .model-description {
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+
 #model-select {
     display: block;
     width: 200px;
