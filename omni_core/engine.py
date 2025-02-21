@@ -26,7 +26,9 @@ PROVIDER_CONFIG = {
         'default_model': 'lbl/cborg-coder:chat',
         'requires_key': True,
         'parameters': {
-            'temperature': 0.7,
+            # Using temperature 0 for code tasks as recommended by CBORG docs
+            'temperature': 0.0,
+            # Keep top_p high to ensure model has access to all relevant tokens
             'top_p': 0.9,
             'seed': None
         }

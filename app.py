@@ -56,7 +56,11 @@ PROVIDER_CONFIG = {
         ],
         'requires_key': True,
         'parameters': {
-            'temperature': 0.7,
+            # Using temperature 0 for code tasks as recommended by CBORG docs
+            # Lower temperature = more deterministic, better for code
+            'temperature': 0.0,
+            # Keep top_p high to ensure model has access to all relevant tokens
+            # Temperature of 0 will still make selection deterministic
             'top_p': 0.9,
             'seed': None
         }
@@ -67,7 +71,7 @@ PROVIDER_CONFIG = {
         'available_models': ['codellama', 'llama2', 'mistral'],
         'requires_key': False,
         'parameters': {
-            'temperature': 0.7,
+            'temperature': 0.0,
             'top_p': 0.9,
             'seed': None
         }

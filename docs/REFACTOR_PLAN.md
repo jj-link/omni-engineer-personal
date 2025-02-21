@@ -237,6 +237,16 @@ Add CBORG support to the existing engine.py while maintaining all current functi
     - Percentage indicator
     - Cancel button
 
+## Extra Features (Low Priority)
+- [ ] Add model parameter controls to web UI:
+  - [ ] Add temperature slider (0.0 - 1.0)
+  - [ ] Add top_p slider (0.0 - 1.0)
+  - [ ] Add parameter presets (Code, Creative, Balanced)
+  - [ ] Save parameter preferences per model
+  - [ ] Add parameter info tooltips
+  - [ ] Update /params endpoint to handle parameter changes
+  - [ ] Add visual feedback for parameter changes
+
 ## Success Criteria
 1. [ ] Can switch between Ollama and CBORG using web interface
 2. [ ] Can switch between Ollama and CBORG using CLI arguments
