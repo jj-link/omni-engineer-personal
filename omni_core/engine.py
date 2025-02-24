@@ -18,6 +18,7 @@ import aiohttp
 from prompt_toolkit import PromptSession
 from prompt_toolkit.styles import Style
 import argparse
+from tools.create_folder_tool_impl import CreateFolderToolImpl
 
 # Provider configuration
 PROVIDER_CONFIG = {
@@ -547,151 +548,53 @@ def tavily_search(query):
     except Exception as e:
         return f"Error performing search: {str(e)}"
 
-tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "create_folder",
-            "description": "Create a new folder at the specified path",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "The absolute or relative path where the folder should be created"
-                    }
-                },
-                "required": ["path"]
-            }
-        }
+# Tools registry with provider support
+tools_registry = {
+    "create_folder": {
+        "class": CreateFolderToolImpl,
+        "supported_providers": ["ollama", "cborg"]
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "create_file",
-            "description": "Create a new file at the specified path with the given content",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "The absolute or relative path where the file should be created"
-                    },
-                    "content": {
-                        "type": "string",
-                        "description": "The content of the file"
-                    }
-                },
-                "required": ["path", "content"]
-            }
-        }
+    "create_file": {
+        "class": CreateFileTool,
+        "supported_providers": ["ollama", "cborg"]
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "edit_and_apply",
-            "description": "Apply AI-powered improvements to a file based on specific instructions and project context",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "The absolute or relative path of the file to edit"
-                    },
-                    "instructions": {
-                        "type": "string",
-                        "description": "Detailed instructions for the changes to be made"
-                    },
-                    "project_context": {
-                        "type": "string",
-                        "description": "Comprehensive context about the project"
-                    }
-                },
-                "required": ["path", "instructions", "project_context"]
-            }
-        }
+    "edit_and_apply": {
+        "class": EditAndApplyTool,
+        "supported_providers": ["ollama", "cborg"]
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "read_file",
-            "description": "Read the contents of a file at the specified path",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "The absolute or relative path of the file to read"
-                    }
-                },
-                "required": ["path"]
-            }
-        }
+    "read_file": {
+        "class": ReadFileTool,
+        "supported_providers": ["ollama", "cborg"]
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "read_multiple_files",
-            "description": "Read the contents of multiple files at the specified paths",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "paths": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "description": "An array of absolute or relative paths of the files to read"
-                    }
-                },
-                "required": ["paths"]
-            }
-        }
+    "read_multiple_files": {
+        "class": ReadMultipleFilesTool,
+        "supported_providers": ["ollama", "cborg"]
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "list_files",
-            "description": "List all files and directories in the specified folder",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "The absolute or relative path of the folder to list"
-                    }
-                }
-            }
-        }
+    "list_files": {
+        "class": ListFilesTool,
+        "supported_providers": ["ollama", "cborg"]
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "tavily_search",
-            "description": "Perform a web search using the Tavily API",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query"
-                    }
-                },
-                "required": ["query"]
-            }
-        }
+    "tavily_search": {
+        "class": TavilySearchTool,
+        "supported_providers": ["ollama", "cborg"]
     }
-]
+}
 
-from typing import Dict, Any
-
-async def execute_tool(tool_call: Dict[str, Any]) -> Dict[str, Any]:
+async def execute_tool(tool_call: Dict[str, Any], provider_context: Optional[ProviderContext] = None) -> Dict[str, Any]:
+    """Execute a tool with provider context support"""
     try:
-        function_call = tool_call['function']
-        tool_name = function_call['name']
-        tool_arguments = function_call['arguments']
-        
-        # Check if tool_arguments is a string and parse it if necessary
+        # Handle different provider formats
+        if "function" in tool_call:
+            # Ollama format
+            function_call = tool_call["function"]
+            tool_name = function_call["name"]
+            tool_arguments = function_call["arguments"]
+        else:
+            # CBORG format
+            tool_name = tool_call["name"]
+            tool_arguments = tool_call["arguments"]
+
+        # Parse string arguments if needed
         if isinstance(tool_arguments, str):
             try:
                 tool_input = json.loads(tool_arguments)
@@ -703,38 +606,38 @@ async def execute_tool(tool_call: Dict[str, Any]) -> Dict[str, Any]:
         else:
             tool_input = tool_arguments
 
-        if tool_name == "create_folder":
-            if "path" not in tool_input:
-                raise KeyError("Missing 'path' parameter for create_folder")
-            result = create_folder(tool_input["path"])
-            return {"content": result, "is_error": False}
-        elif tool_name == "create_file":
-            result = create_file(tool_input["path"], tool_input.get("content", ""))
-            return {"content": result, "is_error": False}
-        elif tool_name == "edit_and_apply":
-            result = await edit_and_apply(
-                tool_input["path"],
-                tool_input["instructions"],
-                tool_input["project_context"],
-                is_automode=automode
-            )
-            return {"content": result, "is_error": False}
-        elif tool_name == "read_file":
-            return read_file(tool_input["path"])
-        elif tool_name == "read_multiple_files":
-            result = read_multiple_files(tool_input["paths"])
-            return {"content": result, "is_error": False}
-        elif tool_name == "list_files":
-            result = list_files(tool_input.get("path", "."))
-            return {"content": result, "is_error": False}
-        elif tool_name == "tavily_search":
-            result = tavily_search(tool_input["query"])
-            return {"content": result, "is_error": False}
-        else:
+        # Check if tool exists
+        if tool_name not in tools_registry:
             return {
                 "content": f"Unknown tool: {tool_name}",
                 "is_error": True
             }
+
+        # Get tool info
+        tool_info = tools_registry[tool_name]
+        tool_class = tool_info["class"]
+
+        # Check provider support
+        if provider_context and provider_context.provider_type not in tool_info["supported_providers"]:
+            return {
+                "content": f"Tool {tool_name} does not support provider {provider_context.provider_type}",
+                "is_error": True
+            }
+
+        # Create tool instance with provider context
+        tool_instance = tool_class(provider_context=provider_context)
+
+        # Execute tool
+        result = await tool_instance.execute(**tool_input)
+
+        # Format response
+        if isinstance(result, dict) and "content" in result:
+            return result
+        return {
+            "content": result,
+            "is_error": False
+        }
+
     except KeyError as e:
         error_message = f"Missing required parameter {str(e)} for tool {tool_name}"
         logging.error(error_message)
@@ -750,10 +653,7 @@ async def execute_tool(tool_call: Dict[str, Any]) -> Dict[str, Any]:
             "is_error": True
         }
 
-
-def parse_goals(response):
-    goals = re.findall(r'Goal \d+: (.+)', response)
-    return goals
+from typing import Dict, Any
 
 async def execute_goals(goals):
     global automode

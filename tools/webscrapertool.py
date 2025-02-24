@@ -23,7 +23,7 @@ class WebScraperTool(BaseTool):
         "required": ["url"]
     }
 
-    def execute(self, **kwargs) -> str:
+    def _execute(self, **kwargs) -> str:
         url = kwargs.get("url")
 
         try:

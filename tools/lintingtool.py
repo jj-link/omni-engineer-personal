@@ -63,7 +63,7 @@ class LintingTool(BaseTool):
         "required": []
     }
 
-    def execute(self, **kwargs) -> str:
+    def _execute(self, **kwargs) -> str:
         paths = kwargs.get("paths", [])
         fix = kwargs.get("fix", False)
         unsafe_fixes = kwargs.get("unsafe_fixes", False)

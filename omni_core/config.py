@@ -3,6 +3,23 @@
 import os
 from typing import Optional, Dict, Any, List
 
+class ProviderConfig:
+    """Configuration for a specific provider instance."""
+    
+    def __init__(self, name: str, model: str, base_url: Optional[str] = None, api_key: Optional[str] = None):
+        """Initialize provider configuration.
+        
+        Args:
+            name: Provider name (e.g., 'ollama', 'cborg')
+            model: Model name to use
+            base_url: Optional base URL for API requests
+            api_key: Optional API key for authentication
+        """
+        self.name = name
+        self.model = model
+        self.base_url = base_url or "http://localhost:11434"
+        self.api_key = api_key
+
 class Configuration:
     """Configuration class for managing provider settings."""
     

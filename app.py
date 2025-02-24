@@ -10,10 +10,10 @@ from dotenv import load_dotenv
 # Load environment variables from .env
 load_dotenv()
 
-# Debug: Print environment variables
+# Print environment variable status
 print("Environment variables:")
-print(f"CBORG_API_KEY set: {'CBORG_API_KEY' in os.environ}")
-print(f"Current provider: {os.getenv('CBORG_API_KEY', 'not set')}")
+print(f"CBORG_API_KEY set: {bool(os.getenv('CBORG_API_KEY'))}")
+print(f"Current provider: {Config.PROVIDER}")
 
 app = Flask(__name__, static_folder='static')
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -21,7 +21,7 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.config['SECRET_KEY'] = 'dev'  # Fixed key for development
 
 # Provider configuration
-default_provider = 'cborg'  # Define default provider
+default_provider = Config.DEFAULT_PROVIDER  # Define default provider
 
 PROVIDER_CONFIG = {
     'cborg': {
@@ -49,8 +49,65 @@ PROVIDER_CONFIG = {
             'anthropic/claude-haiku',
             'anthropic/claude-sonnet',
             'anthropic/claude-opus',
-            
-            # Google Models
+        ],
+        'parameters': {
+            'temperature': 0.7,
+            'top_p': 0.9,
+            'max_tokens': 2048,
+            'stop': None
+        },
+        'requires_key': True,
+        'api_key_env': 'CBORG_API_KEY'
+    },
+    'ollama': {
+        'base_url': 'http://localhost:11434',
+        'default_model': 'codellama',
+        'available_models': [],  # Will be populated dynamically
+        'parameters': {
+            'temperature': 0.7,
+            'top_p': 0.9,
+            'max_tokens': 2048,
+            'stop': None
+        },
+        'requires_key': False
+    },
+    'anthropic': {
+        'base_url': 'https://api.anthropic.com/v1',
+        'default_model': 'anthropic/claude-sonnet',
+        'available_models': [
+            'anthropic/claude-haiku',
+            'anthropic/claude-sonnet',
+            'anthropic/claude-opus'
+        ],
+        'parameters': {
+            'temperature': 0.7,
+            'top_p': 0.95,
+            'max_tokens': 4000
+        },
+        'requires_key': True,
+        'api_key_env': 'ANTHROPIC_API_KEY'
+    },
+    'openai': {
+        'base_url': 'https://api.openai.com/v1',
+        'default_model': 'openai/gpt-4',
+        'available_models': [
+            'openai/gpt-4',
+            'openai/gpt-4-turbo',
+            'openai/gpt-3.5-turbo'
+        ],
+        'parameters': {
+            'temperature': 0.7,
+            'top_p': 0.9,
+            'max_tokens': 4096,
+            'stop': None
+        },
+        'requires_key': True,
+        'api_key_env': 'OPENAI_API_KEY'
+    },
+    'google': {
+        'base_url': 'https://generativelanguage.googleapis.com',
+        'default_model': 'google/gemini-pro',
+        'available_models': [
             'google/gemini-pro',
             'google/gemini-pro-vision',
             'google/gemini-ultra',
@@ -63,111 +120,12 @@ PROVIDER_CONFIG = {
             'stop': None
         },
         'requires_key': True,
-        'api_key_env': 'CBORG_API_KEY'
-    },
-    'ollama': {
-        'default_model': 'codellama:latest',
-        'available_models': [],  # Will be populated dynamically
-        'parameters': {
-            'temperature': 0.7,
-            'top_p': 0.9,
-            'max_tokens': 2048,
-            'stop': None
-        },
-        'requires_key': False
-    }
-}
-
-# Model metadata
-MODEL_METADATA = {
-    'lbl/cborg-chat:latest': {
-        'description': 'Berkeley Lab-hosted chat model based on Llama 3.3 70B + Vision',
-        'capabilities': ['chat', 'vision']
-    },
-    'lbl/cborg-coder:latest': {
-        'description': 'Berkeley Lab-hosted chat model for code assistance based on Qwen Coder 2.5',
-        'capabilities': ['code', 'chat']
-    },
-    'lbl/cborg-vision:latest': {
-        'description': 'Lab-hosted multi-modal model for image analysis Qwen 72B Vision',
-        'capabilities': ['vision', 'chat']
-    },
-    'lbl/cborg-deepthought:latest': {
-        'description': 'Lab-hosted deep reasoning model based on DeepSeekR1-Distill Llama 70B (experimental)',
-        'capabilities': ['chat']
-    },
-    'lbl/cborg-pdfbot': {
-        'description': 'Specialized model for PDF document analysis and Q&A',
-        'capabilities': ['chat', 'document']
-    },
-    'lbl/llama-3': {
-        'description': 'Base Llama 3 model with general chat capabilities',
-        'capabilities': ['chat']
-    },
-    'lbl/qwen-coder': {
-        'description': 'Specialized code assistance model based on Qwen',
-        'capabilities': ['code', 'chat']
-    },
-    'lbl/qwen-vision': {
-        'description': 'Vision-capable model based on Qwen architecture',
-        'capabilities': ['vision', 'chat']
-    },
-    'openai/gpt-4o': {
-        'description': 'The latest high-quality multi-modal model from OpenAI for chat, coding and more',
-        'capabilities': ['code', 'chat', 'vision']
-    },
-    'openai/gpt-4o-mini': {
-        'description': 'Lightweight, low-cost multi-modal model from OpenAI for chat and vision',
-        'capabilities': ['chat', 'vision']
-    },
-    'openai/o1': {
-        'description': 'Latest release of deep reasoning model from OpenAI for chat, coding and analysis',
-        'capabilities': ['code', 'chat']
-    },
-    'openai/o1-mini': {
-        'description': 'Lightweight reasoning model from OpenAI for chat, coding and analysis',
-        'capabilities': ['code', 'chat']
-    },
-    'openai/o3-mini': {
-        'description': 'Latest lightweight reasoning model from OpenAI for chat, coding and analysis',
-        'capabilities': ['code', 'chat']
-    },
-    'google/gemini-pro': {
-        'description': 'Advanced model for general performance across a wide range of tasks',
-        'capabilities': ['chat', 'code']
-    },
-    'google/gemini-pro-vision': {
-        'description': 'Vision-capable model for general performance across a wide range of tasks',
-        'capabilities': ['chat', 'code', 'vision']
-    },
-    'google/gemini-ultra': {
-        'description': 'High-performance model for demanding tasks',
-        'capabilities': ['chat', 'code']
-    },
-    'google/gemini-ultra-vision': {
-        'description': 'Vision-capable high-performance model for demanding tasks',
-        'capabilities': ['chat', 'code', 'vision']
-    },
-    'anthropic/claude-haiku': {
-        'description': 'Fast and affordable model, including vision capabilities',
-        'capabilities': ['chat', 'vision', 'fast']
-    },
-    'anthropic/claude-sonnet': {
-        'description': 'Latest version of cost-optimized model with excellent reasoning and coding',
-        'capabilities': ['chat', 'code']
-    },
-    'anthropic/claude-opus': {
-        'description': 'Advanced model for nuanced reasoning, math, coding and more',
-        'capabilities': ['chat', 'code', 'math']
-    },
-    'wolfram/alpha': {
-        'description': 'Knowledge base query source',
-        'capabilities': ['query']
+        'api_key_env': 'GOOGLE_API_KEY'
     }
 }
 
 # Initialize default provider
-default_provider = 'cborg'  # or 'ollama' based on your preference
+default_provider = Config.DEFAULT_PROVIDER  # or 'ollama' based on your preference
 
 @app.before_request
 def initialize_session():
@@ -255,11 +213,45 @@ def get_models():
                 model_groups[prefix] = []
             model_groups[prefix].append(model)
             
-            # Add metadata if available
-            if model in MODEL_METADATA:
-                meta = MODEL_METADATA[model]
-                capabilities[model] = meta.get('capabilities', [])
-                descriptions[model] = meta.get('description', '')
+            # Add metadata for CBORG models
+            capabilities[model] = ['chat', 'code']  # Default capabilities for CBORG models
+            descriptions[model] = {
+                'lbl/cborg-coder:latest': 'Specialized coding model from CBORG',
+                'lbl/cborg-chat:latest': 'General chat model from CBORG',
+                'lbl/cborg-vision:latest': 'Vision-capable model from CBORG',
+                'lbl/cborg-deepthought:latest': 'Advanced reasoning model from CBORG',
+                'lbl/cborg-pdfbot': 'PDF analysis and interaction model',
+                'lbl/llama-3': 'Open source large language model',
+                'lbl/qwen-coder': 'Code-specialized Qwen model',
+                'lbl/qwen-vision': 'Vision-capable Qwen model',
+                'openai/gpt-4o': 'OpenAI GPT-4 compatible model',
+                'openai/gpt-4o-mini': 'Lightweight GPT-4 compatible model',
+                'openai/o1': 'OpenAI compatible model',
+                'openai/o1-mini': 'Lightweight OpenAI compatible model',
+                'openai/o3-mini': 'Lightweight OpenAI compatible model',
+                'anthropic/claude-haiku': 'Fast and efficient Claude-compatible model',
+                'anthropic/claude-sonnet': 'Balanced Claude-compatible model',
+                'anthropic/claude-opus': 'Advanced Claude-compatible model'
+            }.get(model, 'CBORG language model')
+        
+        # Get Anthropic models
+        anthropic_models = PROVIDER_CONFIG.get('anthropic', {}).get('available_models', [
+            'anthropic/claude-haiku',
+            'anthropic/claude-sonnet',
+            'anthropic/claude-opus'
+        ])
+        for model in anthropic_models:
+            if 'anthropic' not in model_groups:
+                model_groups['anthropic'] = []
+            model_groups['anthropic'].append(model)
+            
+            # Add metadata
+            capabilities[model] = ['chat', 'code']  # Default capabilities
+            descriptions[model] = {
+                'anthropic/claude-haiku': 'Fast and affordable model, including vision capabilities',
+                'anthropic/claude-sonnet': 'Latest version of cost-optimized model with excellent reasoning and coding',
+                'anthropic/claude-opus': 'Advanced model for nuanced reasoning, math, coding and more'
+            }.get(model, 'Anthropic language model')
         
         # Get Ollama models
         try:
@@ -314,11 +306,14 @@ def switch_model():
         # Determine provider from model name
         if '/' in model:
             provider = model.split('/')[0]  # e.g. 'lbl/cborg-chat:latest' -> 'lbl'
+            if provider == 'lbl':
+                provider = 'cborg'  # Map LBL prefix to CBORG provider
         else:
             provider = 'ollama'  # Ollama models don't have a prefix
         
         # Validate provider
-        if provider not in PROVIDER_CONFIG and provider not in ['lbl', 'openai', 'anthropic', 'google', 'wolfram']:
+        valid_providers = {'cborg', 'ollama', 'anthropic', 'openai', 'google', 'wolfram'}
+        if provider not in valid_providers:
             return jsonify({
                 'error': f'Invalid provider: {provider}'
             }), 400
@@ -345,23 +340,52 @@ def switch_model():
                 print(f"Error listing Ollama models: {str(e)}")
                 return jsonify({'error': 'Failed to list Ollama models'}), 500
         else:
-            models = PROVIDER_CONFIG['cborg']['available_models']
+            # For other providers, check if model exists in their config
+            provider_models = PROVIDER_CONFIG.get(provider, {}).get('available_models', [])
+            if not provider_models:
+                return jsonify({
+                    'error': f'No models available for provider {provider}'
+                }), 400
+            models = provider_models
         
         if model not in models:
             return jsonify({
                 'error': f'Model {model} is not available for provider {provider}'
             }), 400
         
-        # Update session
-        session['current_model'] = model
+        # Check if provider requires API key
+        if PROVIDER_CONFIG.get(provider, {}).get('requires_key'):
+            api_key_env = PROVIDER_CONFIG[provider]['api_key_env']
+            if not os.getenv(api_key_env):
+                return jsonify({
+                    'error': f'API key required for {provider}. Please set {api_key_env} environment variable.'
+                }), 400
         
-        # Update assistant's model
-        if '/' in model:  # CBORG model
-            assistant.model = model
+        # Update session
+        current_model = session.get('current_model')
+        current_provider = session.get('current_provider')
+        
+        # If switching from an Ollama model, stop it first
+        if current_provider == 'ollama' and current_model:
+            try:
+                # Stop the current model
+                stop_result = subprocess.run(['ollama', 'stop', current_model], capture_output=True, text=True)
+                if stop_result.returncode != 0:
+                    print(f"Warning: Failed to stop previous Ollama model: {stop_result.stderr}")
+            except Exception as e:
+                print(f"Warning: Error stopping previous Ollama model: {str(e)}")
+        
+        session['current_model'] = model
+        session['current_provider'] = provider
+        
+        # Update assistant's provider and model
+        assistant.provider = provider
+        assistant.model = model
         
         return jsonify({
             'success': True,
-            'model': model
+            'model': model,
+            'provider': provider
         })
         
     except Exception as e:

@@ -38,7 +38,7 @@ class DiffEditorTool(BaseTool):
         "required": ["path", "old_text", "new_text"]
     }
 
-    def execute(self, **kwargs) -> str:
+    def _execute(self, **kwargs) -> str:
         path = kwargs.get("path")
         old_text = kwargs.get("old_text")
         new_text = kwargs.get("new_text")

@@ -50,7 +50,7 @@ class ScreenshotTool(BaseTool):
         "required": []
     }
 
-    def execute(self, **kwargs) -> Any:
+    def _execute(self, **kwargs) -> Any:
         region = kwargs.get("region", None)
         if region is not None and len(region) != 4:
             return "Invalid region specified. Must be a list of four integers: [x, y, width, height]."

@@ -51,7 +51,7 @@ class E2bCodeTool(BaseTool):
         "required": ["code"]
     }
 
-    def execute(self, **kwargs) -> str:
+    def _execute(self, **kwargs) -> str:
         try:
             load_dotenv()
             

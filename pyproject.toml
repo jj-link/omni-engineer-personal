@@ -60,6 +60,9 @@ Documentation = "https://github.com/yourusername/omni-engineer#readme"
 [tool.hatch]
 version.path = "omni_engineer/__init__.py"
 
+[tool.hatch.build.targets.wheel]
+packages = ["omni_core", "tools"]
+
 [tool.ruff]
 line-length = 88
 target-version = "py39"

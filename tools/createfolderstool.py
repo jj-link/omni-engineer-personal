@@ -4,53 +4,55 @@ import pathlib
 from typing import List
 
 class CreateFoldersTool(BaseTool):
-    name = "createfolderstool"
-    description = '''
-    Creates new folders at specified paths, including nested directories if needed.
-    Accepts a list of folder paths and creates each folder along with any necessary parent directories.
-    Supports both absolute and relative paths.
-    Returns status messages for each folder creation attempt.
-    '''
+    name = "create_folder"
+    description = '''Creates a new folder at the specified absolute or relative path. Use this tool by providing a path parameter in the following format:
+    
+    {
+        "path": "/absolute/path" or "relative/path"
+    }
+    
+    Example:
+    To create a folder named "test" in the current directory:
+    {
+        "path": "test"
+    }
+    
+    To create a nested folder:
+    {
+        "path": "parent/child"
+    }
+    
+    Note: The path can be absolute (e.g., /Users/username/Documents) or relative (e.g., myfolder).'''
     input_schema = {
         "type": "object",
         "properties": {
-            "folder_paths": {
-                "type": "array",
-                "items": {
-                    "type": "string"
-                },
-                "description": "List of folder paths to create"
+            "path": {
+                "type": "string",
+                "description": "The absolute or relative path where the folder should be created"
             }
         },
-        "required": ["folder_paths"]
+        "required": ["path"]
     }
 
-    def execute(self, **kwargs) -> str:
-        folder_paths: List[str] = kwargs.get("folder_paths", [])
-        if not folder_paths:
-            return "No folder paths provided"
+    def _execute(self, **kwargs) -> str:
+        path = kwargs.get("path")
+        if not path:
+            return "No folder path provided"
 
-        results = []
-        for path in folder_paths:
-            try:
-                # Normalize path
-                normalized_path = os.path.normpath(path)
-                absolute_path = os.path.abspath(normalized_path)
-                
-                # Validate path
-                if not all(c not in '<>:"|?*' for c in absolute_path):
-                    results.append(f"Invalid characters in path: {path}")
-                    continue
+        try:
+            # Normalize path
+            normalized_path = os.path.normpath(path)
+            absolute_path = os.path.abspath(normalized_path)
+            
+            # Validate path
+            if not all(c not in '<>:"|?*' for c in absolute_path):
+                return {"response": "Error: Invalid characters in path"}
 
-                # Create directory
-                os.makedirs(absolute_path, exist_ok=True)
-                results.append(f"Successfully created folder: {path}")
+            # Create directory
+            os.makedirs(absolute_path, exist_ok=True)
+            return {"response": f"Successfully created folder: {path}"}
 
-            except PermissionError:
-                results.append(f"Permission denied: Unable to create folder {path}")
-            except OSError as e:
-                results.append(f"Error creating folder {path}: {str(e)}")
-            except Exception as e:
-                results.append(f"Unexpected error creating folder {path}: {str(e)}")
-
-        return "\n".join(results)
+        except PermissionError:
+            return {"response": "Permission denied: Unable to create folder"}
+        except OSError as e:
+            return {"response": f"Error creating folder: {str(e)}"}

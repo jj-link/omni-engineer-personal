@@ -125,7 +125,131 @@ Add CBORG support to the existing engine.py while maintaining all current functi
   - [ ] File operations
   - [ ] Conversation history
 
-## Phase 4: Error Handling
+## Phase 4: Tools Implementation
+
+### Context
+The project currently has two key components that need to be integrated:
+1. Original claude-engineer tools system:
+   - Located in /tools directory
+   - Each tool inherits from BaseTool class
+   - Tools designed for Claude/Anthropic API originally
+   - Tools use a function-calling schema similar to OpenAI
+   
+2. New CBORG integration:
+   - Added PROVIDER_CONFIG in engine.py for provider management
+   - Supports both Ollama and CBORG models
+   - Each provider has different response formats and capabilities
+   - Need to maintain all existing tool functionality while supporting both providers
+
+### Implementation Tasks
+
+#### 1. Provider-Agnostic BaseTool Class (/tools/base.py)
+- [x] Create ProviderContext class to encapsulate provider-specific logic:
+  ```python
+  class ProviderContext:
+      def __init__(self, provider_type, model, parameters):
+          self.provider_type = provider_type  # 'ollama' or 'cborg'
+          self.model = model
+          self.parameters = parameters
+  ```
+- [x] Update BaseTool constructor to accept ProviderContext:
+  ```python
+  def __init__(self, provider_context: Optional[ProviderContext] = None):
+      self.provider_context = provider_context
+  ```
+- [x] Add provider-specific response parsing methods:
+  ```python
+  def parse_response(self, response: dict) -> Any:
+      if self.provider_context.provider_type == 'cborg':
+          return self._parse_cborg_response(response)
+      return self._parse_ollama_response(response)
+  ```
+- [x] Add tests in /tests/test_base_tool.py:
+  - Test provider context initialization
+  - Test response parsing for each provider
+  - Test error handling scenarios
+
+#### 2. Tool Execution System (engine.py)
+- [ ] Update execute_tool function (line 687):
+  ```python
+  async def execute_tool(tool_call: Dict[str, Any], provider_context: ProviderContext):
+      tool_name = tool_call["function"]["name"]
+      tool_instance = tools_registry[tool_name](provider_context)
+      return await tool_instance.execute(**tool_call["function"]["arguments"])
+  ```
+- [ ] Add provider-specific function call formatting:
+  - CBORG format: {"name": "tool_name", "arguments": {...}}
+  - Ollama format: {"function": {"name": "tool_name", "arguments": {...}}}
+- [ ] Update tools registry to support provider capabilities:
+  ```python
+  tools_registry = {
+      "file_editor": {
+          "class": FileEditorTool,
+          "supported_providers": ["ollama", "cborg"]
+      }
+  }
+  ```
+
+#### 3. Individual Tool Updates
+Each tool in /tools needs the following updates:
+
+##### 3.1 CreateFolderTool (/tools/create_folder_tool.py)
+- [x] Create abstract base class with provider-agnostic interface
+- [x] Implement concrete class in create_folder_tool_impl.py
+- [x] Add comprehensive unit tests:
+  - [x] Test folder creation
+  - [x] Test error handling
+  - [x] Test provider-specific responses
+- [x] Fix response formatting issues:
+  - [x] Ensure consistent response structure
+  - [x] Handle provider-specific formatting in base class
+  - [x] Add integration tests with both providers
+- [x] Add manual testing script:
+  - [x] Test with Ollama provider
+  - [x] Test with CBORG provider
+  - [x] Test error scenarios
+
+##### 3.2 FileEditorTool (/tools/fileedittool.py)
+- [ ] Update execute method for provider-specific handling
+- [ ] Add provider-specific response formatting
+- [ ] Update tests in /tests/test_file_editor_tool.py
+
+##### 3.3 CodeSearchTool (/tools/codesearchtool.py)
+- [ ] Update execute method for provider-specific handling
+- [ ] Add provider-specific response formatting
+- [ ] Update tests in /tests/test_code_search_tool.py
+
+##### 3.4 CommandRunnerTool (/tools/commandrunnertool.py)
+- [ ] Update execute method for provider-specific handling
+- [ ] Add provider-specific response formatting
+- [ ] Update tests in /tests/test_command_runner_tool.py
+
+##### 3.5 WebSearchTool (/tools/websearchtool.py)
+- [ ] Update execute method for provider-specific handling
+- [ ] Add provider-specific response formatting
+- [ ] Update tests in /tests/test_web_search_tool.py
+
+#### 4. Testing Strategy
+- [ ] Unit Tests:
+  - [ ] Test each tool with both providers
+  - [ ] Test error handling for each provider
+  - [ ] Test response formatting
+- [ ] Integration Tests:
+  - [ ] Test tool chaining
+  - [ ] Test provider switching mid-conversation
+  - [ ] Test error recovery
+- [ ] Manual Testing:
+  - [ ] Create test scripts for each tool
+  - [ ] Test real-world scenarios
+  - [ ] Document edge cases and limitations
+
+#### 5. Documentation
+- [ ] Update tool documentation with provider-specific details
+- [ ] Add examples for both providers
+- [ ] Document response formats and error handling
+- [ ] Add troubleshooting guide
+
+## Phase 5: Error Handling
 - [ ] Add CBORG-specific error handling:
   - [ ] Connection errors
   - [ ] API authentication
@@ -134,7 +258,7 @@ Add CBORG support to the existing engine.py while maintaining all current functi
   - [ ] Automatic retries
 - [ ] Ensure errors are properly displayed in web UI
 
-## Phase 5: Testing
+## Phase 6: Testing
 - [x] Test web interface components:
   - [x] Basic chat functionality
   - [x] Image upload and analysis
@@ -147,7 +271,7 @@ Add CBORG support to the existing engine.py while maintaining all current functi
 - [ ] Test error handling scenarios
 - [ ] Document any CBORG-specific behavior
 
-## Phase 6: UI/UX Implementation
+## Phase 7: UI/UX Implementation
 - [ ] Implement new layout structure:
   - [ ] Create left sidebar component (250px width)
   - [ ] Add collapsible toggle button for sidebar

@@ -99,7 +99,7 @@ class FileCreatorTool(BaseTool):
         "required": ["files"]
     }
 
-    def execute(self, **kwargs) -> str:
+    def _execute(self, **kwargs) -> str:
         """
         Execute the file creation process.
         

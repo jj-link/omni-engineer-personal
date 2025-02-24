@@ -116,7 +116,7 @@ class FileContentReaderTool(BaseTool):
 
         return results
 
-    def execute(self, **kwargs) -> str:
+    def _execute(self, **kwargs) -> str:
         file_paths = kwargs.get('file_paths', [])
         results = {}
 

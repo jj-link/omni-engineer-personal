@@ -26,7 +26,7 @@ class DuckduckgoTool(BaseTool):
         "required": ["query"]
     }
 
-    def execute(self, **kwargs) -> str:
+    def _execute(self, **kwargs) -> str:
         query = kwargs.get("query")
         num_results = kwargs.get("num_results", 8)
 

@@ -44,7 +44,7 @@ class UVPackageManager(BaseTool):
         "required": ["command"]
     }
 
-    def execute(self, **kwargs) -> str:
+    def _execute(self, **kwargs) -> str:
         command = kwargs.get("command")
         packages = kwargs.get("packages", [])
         python_version = kwargs.get("python_version")

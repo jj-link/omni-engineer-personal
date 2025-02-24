@@ -16,9 +16,11 @@ import logging
 import requests
 from dotenv import load_dotenv
 import ollama  # Add ollama import
+import re
+import uuid
 
 from config import Config
-from tools.base import BaseTool
+from tools.base import BaseTool, ProviderContext  # Remove get_tools import
 from prompt_toolkit import prompt
 from prompt_toolkit.styles import Style
 from prompts.system_prompts import SystemPrompts
@@ -43,16 +45,23 @@ class Assistant:
     """
 
     def __init__(self, provider='anthropic'):
+        """Initialize the assistant with the specified provider"""
         self._provider = None  # Private provider field
         self.conversation_history: List[Dict[str, Any]] = []
         self.console = Console()
         self.thinking_enabled = getattr(Config, 'ENABLE_THINKING', False)
         self.temperature = getattr(Config, 'DEFAULT_TEMPERATURE', 0.7)
         self.total_tokens_used = 0
-        self.tools = self._load_tools()
         
-        # Set provider after initializing other fields
+        # Set provider first
         self.provider = provider
+        # Then load tools with proper provider context
+        self.provider_context = ProviderContext(
+            provider_type=self.provider,
+            model=self.model,
+            parameters={'temperature': self.temperature}
+        )
+        self.tools = self._load_tools()
 
     @property
     def provider(self):
@@ -66,19 +75,20 @@ class Assistant:
 
         # Initialize provider-specific settings
         if value == 'anthropic':
-            if not getattr(Config, 'ANTHROPIC_API_KEY', None):
+            if not os.getenv('ANTHROPIC_API_KEY'):
                 raise ValueError("No ANTHROPIC_API_KEY found in environment variables")
-            self.client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
-            self.model = Config.MODEL
+            self.api_key = os.getenv('ANTHROPIC_API_KEY')
+            self.base_url = 'https://api.anthropic.com'
+            self.model = Config.PROVIDER_MODELS['anthropic']
         elif value == 'cborg':
             if not os.getenv('CBORG_API_KEY'):
                 raise ValueError("No CBORG_API_KEY found in environment variables")
             self.api_key = os.getenv('CBORG_API_KEY')
             self.base_url = 'https://api.cborg.lbl.gov'
-            self.model = 'lbl/cborg-coder:chat'  # Using CBORG's dedicated coding model with chat endpoint
+            self.model = Config.PROVIDER_MODELS['cborg']
         elif value == 'ollama':
             self.base_url = 'http://localhost:11434'
-            self.model = 'codellama'
+            self.model = Config.PROVIDER_MODELS['ollama']
 
         self._provider = value
 
@@ -88,22 +98,99 @@ class Assistant:
         Handles both text-only and multimodal messages.
         """
         try:
-            if self.provider == 'cborg':
+            if self.provider == 'anthropic':
+                # Prepare conversation history for Anthropic
+                messages = []
+                last_assistant_with_tools = None
+                
+                for msg in self.conversation_history:
+                    content = msg.get('content', '')
+                    role = msg.get('role', '')
+                    
+                    # For assistant messages with tool calls, track the last one
+                    if role == 'assistant' and 'tool_calls' in msg:
+                        last_assistant_with_tools = {
+                            'role': role,
+                            'content': content,
+                            'tool_calls': msg['tool_calls']
+                        }
+                        continue
+                    
+                    # For regular messages just pass content
+                    if role != 'tool':  # Skip tool messages as they'll be added with their assistant
+                        messages.append({
+                            'role': role,
+                            'content': content
+                        })
+                
+                # If we have a pending assistant+tools message and it's followed by tool results,
+                # add them together
+                if last_assistant_with_tools:
+                    messages.append(last_assistant_with_tools)
+                    # Add the corresponding tool results
+                    tool_results = [msg for msg in self.conversation_history 
+                                  if msg.get('role') == 'tool' and 
+                                  any(call['id'] == msg.get('tool_call_id') 
+                                      for call in last_assistant_with_tools['tool_calls'])]
+                    messages.extend(tool_results)
+
+                # Make request to Anthropic API
+                response = requests.post(
+                    f"{self.base_url}/v1/messages",
+                    headers={
+                        'anthropic-version': '2023-06-01',
+                        'x-api-key': self.api_key,
+                        'Content-Type': 'application/json'
+                    },
+                    json={
+                        'model': self.model,
+                        'messages': [
+                            {'role': 'system', 'content': f"{SystemPrompts.DEFAULT}\n\n{SystemPrompts.TOOL_USAGE}"},
+                            *messages
+                        ],
+                        'temperature': self.temperature,
+                        'tools': self.tools,
+                        'tool_choice': 'auto'  # Enable automatic tool choice
+                    }
+                )
+                response.raise_for_status()
+                return response.json()
+
+            elif self.provider == 'cborg':
                 # Prepare conversation history for CBORG
                 messages = []
+                last_assistant_with_tools = None
+                
                 for msg in self.conversation_history:
-                    content = msg['content']
-                    if isinstance(content, list):
-                        # Handle multimodal content
-                        text_parts = []
-                        for part in content:
-                            if part.get('type') == 'text':
-                                text_parts.append(part['text'])
-                        content = ' '.join(text_parts)
-                    messages.append({
-                        'role': msg['role'],
-                        'content': content
-                    })
+                    content = msg.get('content', '')
+                    role = msg.get('role', '')
+                    
+                    # For assistant messages with tool calls, track the last one
+                    if role == 'assistant' and 'tool_calls' in msg:
+                        last_assistant_with_tools = {
+                            'role': role,
+                            'content': content,
+                            'tool_calls': msg['tool_calls']
+                        }
+                        continue
+                    
+                    # For regular messages just pass content
+                    if role != 'tool':  # Skip tool messages as they'll be added with their assistant
+                        messages.append({
+                            'role': role,
+                            'content': content
+                        })
+                
+                # If we have a pending assistant+tools message and it's followed by tool results,
+                # add them together
+                if last_assistant_with_tools:
+                    messages.append(last_assistant_with_tools)
+                    # Add the corresponding tool results
+                    tool_results = [msg for msg in self.conversation_history 
+                                  if msg.get('role') == 'tool' and 
+                                  any(call['id'] == msg.get('tool_call_id') 
+                                      for call in last_assistant_with_tools['tool_calls'])]
+                    messages.extend(tool_results)
 
                 # Make request to CBORG API
                 response = requests.post(
@@ -114,9 +201,14 @@ class Assistant:
                     },
                     json={
                         'model': self.model,
-                        'messages': messages,
+                        'messages': [
+                            {'role': 'system', 'content': f"{SystemPrompts.DEFAULT}\n\n{SystemPrompts.TOOL_USAGE}"},
+                            *messages
+                        ],
                         'temperature': self.temperature,
-                        'stream': False
+                        'stream': False,
+                        'tools': self.tools,
+                        'tool_choice': 'auto'  # Enable automatic tool choice
                     }
                 )
                 
@@ -125,101 +217,64 @@ class Assistant:
                 
                 result = response.json()
                 
-                # Add response to conversation history
+                # Check for tool usage
                 assistant_message = result['choices'][0]['message']
+                tool_calls = assistant_message.get('tool_calls', [])
+                if tool_calls:
+                    self.console.print("\n[bold yellow]  Handling Tool Use...[/bold yellow]\n")
+                    
+                    tool_results = []
+                    for tool_call in tool_calls:
+                        # Create a tool use object compatible with our _execute_tool method
+                        tool_use = type('ToolUse', (), {
+                            'name': tool_call['function']['name'],
+                            'input': json.loads(tool_call['function']['arguments'])
+                        })
+                        
+                        result = self._execute_tool(tool_use)
+                        
+                        # Format tool result for CBORG
+                        tool_results.append({
+                            'role': 'tool',
+                            'content': str(result),
+                            'tool_call_id': tool_call['id'],
+                            'name': tool_call['function']['name']
+                        })
+                    
+                    # Add tool results to conversation history
+                    self.conversation_history.append({
+                        "role": "assistant",
+                        "content": assistant_message.get('content', '')
+                    })
+                    # Add each tool result as a separate message
+                    for tool_result in tool_results:
+                        self.conversation_history.append(tool_result)
+                    return self._get_completion()  # Recursive call to continue
+                
+                # If no tool usage, just return the response
                 self.conversation_history.append({
                     'role': 'assistant',
-                    'content': assistant_message['content']
+                    'content': assistant_message.get('content', '')
                 })
                 
                 # Track token usage
                 if 'usage' in result:
                     self.total_tokens_used += result['usage']['total_tokens']
                 
-                return assistant_message['content']
-
-            elif self.provider == 'anthropic':
-                # Existing Anthropic implementation
-                response = self.client.messages.create(
-                    model=Config.MODEL,
-                    max_tokens=min(
-                        Config.MAX_TOKENS,
-                        Config.MAX_CONVERSATION_TOKENS - self.total_tokens_used
-                    ),
-                    temperature=self.temperature,
-                    tools=self.tools,
-                    messages=self.conversation_history,
-                    system=f"{SystemPrompts.DEFAULT}\n\n{SystemPrompts.TOOL_USAGE}"
-                )
-
-                # Update token usage based on response usage
-                if hasattr(response, 'usage') and response.usage:
-                    message_tokens = response.usage.input_tokens + response.usage.output_tokens
-                    self.total_tokens_used += message_tokens
-                    self._display_token_usage(response.usage)
-
-                if self.total_tokens_used >= Config.MAX_CONVERSATION_TOKENS:
-                    self.console.print("\n[bold red]Token limit reached! Please reset the conversation.[/bold red]")
-                    return "Token limit reached! Please type 'reset' to start a new conversation."
-
-                if response.stop_reason == "tool_use":
-                    self.console.print("\n[bold yellow]  Handling Tool Use...[/bold yellow]\n")
-
-                    tool_results = []
-                    if getattr(response, 'content', None) and isinstance(response.content, list):
-                        # Execute each tool in the response content
-                        for content_block in response.content:
-                            if content_block.type == "tool_use":
-                                result = self._execute_tool(content_block)
-                                
-                                # Handle structured data (like image blocks) vs text
-                                if isinstance(result, (list, dict)):
-                                    tool_results.append({
-                                        "type": "tool_result",
-                                        "tool_use_id": content_block.id,
-                                        "content": result  # Keep structured data intact
-                                    })
-                                else:
-                                    # Convert text results to proper content blocks
-                                    tool_results.append({
-                                        "type": "tool_result",
-                                        "tool_use_id": content_block.id,
-                                        "content": [{"type": "text", "text": str(result)}]
-                                    })
-
-                        # Append tool usage to conversation and continue
-                        self.conversation_history.append({
-                            "role": "assistant",
-                            "content": response.content
-                        })
-                        self.conversation_history.append({
-                            "role": "user",
-                            "content": tool_results
-                        })
-                        return self._get_completion()  # Recursive call to continue the conversation
-
-                    else:
-                        self.console.print("[red]No tool content received despite 'tool_use' stop reason.[/red]")
-                        return "Error: No tool content received"
-
-                # Final assistant response
-                if (getattr(response, 'content', None) and 
-                    isinstance(response.content, list) and 
-                    response.content):
-                    final_content = response.content[0].text
-                    self.conversation_history.append({
-                        "role": "assistant",
-                        "content": response.content
-                    })
-                    return final_content
-                else:
-                    self.console.print("[red]No content in final response.[/red]")
-                    return "No response content available."
+                return assistant_message.get('content', '')
 
             elif self.provider == 'ollama':
                 try:
                     # Prepare conversation history for Ollama
                     messages = []
+                    
+                    # Add system prompt first
+                    messages.append({
+                        'role': 'system',
+                        'content': f"{SystemPrompts.DEFAULT}\n\n{SystemPrompts.OLLAMA_TOOL_USAGE}"
+                    })
+                    
+                    # Add conversation history
                     for msg in self.conversation_history:
                         content = msg['content']
                         if isinstance(content, list):
@@ -242,19 +297,66 @@ class Assistant:
                         stream=False,
                         options={
                             'temperature': self.temperature,
-                            'top_p': 0.9
+                            'top_p': 0.9,
+                            'tools': self.tools,  # Add tools configuration
+                            'tool_choice': 'auto'  # Enable automatic tool choice
                         }
                     )
 
-                    # Add response to conversation history
+                    # Check for tool usage in the response text
+                    response_content = response['message']['content']
+                    tool_call_match = re.search(r'<tool_calls>(.*?)</tool_calls>', response_content, re.DOTALL)
+                    
+                    if tool_call_match:
+                        try:
+                            # Parse the tool call JSON
+                            tool_call_json = json.loads(tool_call_match.group(1).strip())
+                            
+                            # Create a tool call object
+                            tool_call = {
+                                'id': str(uuid.uuid4()),  # Generate a unique ID
+                                'function': tool_call_json['function']
+                            }
+                            
+                            # Create tool use object
+                            tool_use = type('ToolUse', (), {
+                                'name': tool_call['function']['name'],
+                                'input': json.loads(json.dumps(tool_call['function']['arguments']))  # Ensure proper JSON encoding
+                            })
+                            
+                            # Execute the tool
+                            self.console.print("\n[bold yellow]  Handling Tool Use...[/bold yellow]\n")
+                            result = self._execute_tool(tool_use)
+                            
+                            # Format tool result
+                            tool_result = {
+                                'role': 'tool',
+                                'content': str(result),
+                                'tool_call_id': tool_call['id'],
+                                'name': tool_call['function']['name']
+                            }
+                            
+                            # Add results to conversation history
+                            self.conversation_history.append({
+                                "role": "assistant",
+                                "content": response_content
+                            })
+                            self.conversation_history.append(tool_result)
+                            return self._get_completion()  # Recursive call to continue
+                        except json.JSONDecodeError as e:
+                            logging.error(f"Failed to parse tool call JSON: {str(e)}")
+                            return f"Error: Invalid tool call format - {str(e)}"
+                        except Exception as e:
+                            logging.error(f"Error executing tool call: {str(e)}")
+                            return f"Error executing tool: {str(e)}"
+                    
+                    # If no tool usage, just return the response
                     assistant_message = {
                         'role': 'assistant',
-                        'content': response['message']['content']
+                        'content': response_content
                     }
                     self.conversation_history.append(assistant_message)
-
-                    # Return just the content
-                    return response['message']['content']
+                    return response_content
 
                 except Exception as e:
                     logging.error(f"Ollama error: {str(e)}")
@@ -302,15 +404,22 @@ class Assistant:
             self.console.print("[red]TOOLS_DIR not set in Config[/red]")
             return tools
 
+        self.console.print(f"[cyan]Loading tools from: {tools_path}[/cyan]")
+
         # Clear cached tool modules for fresh import
         for module_name in list(sys.modules.keys()):
             if module_name.startswith('tools.') and module_name != 'tools.base':
                 del sys.modules[module_name]
 
         try:
-            for module_info in pkgutil.iter_modules([str(tools_path)]):
+            modules = list(pkgutil.iter_modules([str(tools_path)]))
+            self.console.print(f"[cyan]Found {len(modules)} modules[/cyan]")
+            
+            for module_info in modules:
                 if module_info.name == 'base':
                     continue
+
+                self.console.print(f"[cyan]Loading module: {module_info.name}[/cyan]")
 
                 # Attempt loading the tool module
                 try:
@@ -340,6 +449,7 @@ class Assistant:
         except Exception as overall_err:
             self.console.print(f"[red]Error in tool loading process:[/red] {str(overall_err)}")
 
+        self.console.print(f"[cyan]Successfully loaded {len(tools)} tools[/cyan]")
         return tools
 
     def _parse_missing_dependency(self, error_str: str) -> str:
@@ -356,20 +466,71 @@ class Assistant:
     def _extract_tools_from_module(self, module, tools: List[Dict[str, Any]]) -> None:
         """
         Given a tool module, find and instantiate all tool classes (subclasses of BaseTool).
-        Append them to the 'tools' list.
+        Skips abstract base classes and loads their concrete implementations.
         """
+        provider_context = self.provider_context
+        print(f"Examining module {module.__name__}")
+
         for name, obj in inspect.getmembers(module):
-            if (inspect.isclass(obj) and issubclass(obj, BaseTool) and obj != BaseTool):
-                try:
-                    tool_instance = obj()
-                    tools.append({
-                        "name": tool_instance.name,
-                        "description": tool_instance.description,
-                        "input_schema": tool_instance.input_schema
-                    })
-                    self.console.print(f"[green]Loaded tool:[/green] {tool_instance.name}")
-                except Exception as tool_init_err:
-                    self.console.print(f"[red]Error initializing tool {name}:[/red] {str(tool_init_err)}")
+            if inspect.isclass(obj):
+                print(f"  Found class: {name}")
+                if issubclass(obj, BaseTool):
+                    print(f"    Is a BaseTool subclass")
+                    print(f"    obj == BaseTool? {obj == BaseTool}")
+                    print(f"    is abstract? {inspect.isabstract(obj)}")
+                    if obj != BaseTool and not inspect.isabstract(obj):
+                        print(f"    Not BaseTool itself and not abstract")
+                        try:
+                            tool_instance = obj(provider_context=provider_context)
+                            print(f"    Created instance")
+                            if all(hasattr(tool_instance, attr) for attr in ['name', 'description', 'input_schema']):
+                                print(f"    Has all required attributes")
+                                
+                                # Validate tool attributes for CBORG
+                                if self.provider == 'cborg':
+                                    # Validate name is not empty and matches pattern
+                                    if not tool_instance.name or not tool_instance.name.strip():
+                                        print(f"    Skipping tool: empty name")
+                                        continue
+                                    if not all(c.isalnum() or c in '_-' for c in tool_instance.name):
+                                        print(f"    Skipping tool: name contains invalid characters")
+                                        continue
+                                        
+                                    # Validate description is not empty
+                                    if not tool_instance.description or not tool_instance.description.strip():
+                                        print(f"    Skipping tool: empty description")
+                                        continue
+
+                                    # Create tool spec
+                                    tool_spec = {
+                                        'name': tool_instance.name.strip(),
+                                        'description': tool_instance.description.strip(),
+                                        'parameters': tool_instance.input_schema
+                                    }
+                                    # Add both toolSpec and function fields
+                                    tools.append({
+                                        'toolSpec': tool_spec,
+                                        'function': tool_spec  # CBORG requires both fields
+                                    })
+                                else:
+                                    # Format tool for other providers
+                                    tools.append({
+                                        'type': 'function',
+                                        'function': {
+                                            'name': tool_instance.name,
+                                            'description': tool_instance.description,
+                                            'parameters': tool_instance.input_schema
+                                        }
+                                    })
+                                print(f"    Successfully added tool: {tool_instance.name}")
+                            else:
+                                missing = [attr for attr in ['name', 'description', 'input_schema'] 
+                                         if not hasattr(tool_instance, attr)]
+                                print(f"    Missing attributes: {', '.join(missing)}")
+                        except Exception as tool_init_err:
+                            print(f"    Error initializing tool {name}: {str(tool_init_err)}")
+                else:
+                    print(f"    Not a BaseTool subclass")
 
     def refresh_tools(self):
         """
@@ -478,43 +639,59 @@ class Assistant:
         Given a tool usage request (with tool name and inputs),
         dynamically load and execute the corresponding tool.
         """
-        tool_name = tool_use.name
-        tool_input = tool_use.input or {}
-        tool_result = None
-
         try:
-            module = importlib.import_module(f'tools.{tool_name}')
-            tool_instance = self._find_tool_instance_in_module(module, tool_name)
+            # Search for tool in all tool modules
+            tools_path = getattr(Config, 'TOOLS_DIR', None)
+            if not tools_path:
+                return "Error: TOOLS_DIR not set in Config"
 
-            if not tool_instance:
-                tool_result = f"Tool not found: {tool_name}"
-            else:
-                # Execute the tool with the provided input
+            # Attempt to find and execute the tool
+            for module_info in pkgutil.iter_modules([str(tools_path)]):
+                if module_info.name == 'base':
+                    continue
+
                 try:
-                    result = tool_instance.execute(**tool_input)
-                    # Keep structured data intact
-                    tool_result = result
-                except Exception as exec_err:
-                    tool_result = f"Error executing tool '{tool_name}': {str(exec_err)}"
-        except ImportError:
-            tool_result = f"Failed to import tool: {tool_name}"
-        except Exception as e:
-            tool_result = f"Error executing tool: {str(e)}"
+                    module = importlib.import_module(f'tools.{module_info.name}')
+                    tool_instance = self._find_tool_instance_in_module(module, tool_use.name)
+                    
+                    if tool_instance:
+                        # Display tool usage if enabled
+                        self._display_tool_usage(tool_use.name, tool_use.input, "Executing...")
+                        
+                        # Execute the tool and get result
+                        result = tool_instance.execute(**tool_use.input)
+                        
+                        # Handle dictionary responses with 'response' key
+                        if isinstance(result, dict) and 'response' in result:
+                            return result['response']
+                        
+                        return str(result)
+                        
+                except Exception as e:
+                    self.console.print(f"[red]Error executing tool {tool_use.name}:[/red] {str(e)}")
+                    return f"Error: {str(e)}"
 
-        # Display tool usage with proper handling of structured data
-        self._display_tool_usage(tool_name, tool_input, 
-            json.dumps(tool_result) if not isinstance(tool_result, str) else tool_result)
-        return tool_result
+            return f"Tool {tool_use.name} not found"
+
+        except Exception as e:
+            self.console.print(f"[red]Error in tool execution:[/red] {str(e)}")
+            return f"Error: {str(e)}"
 
     def _find_tool_instance_in_module(self, module, tool_name: str):
         """
         Search a given module for a tool class matching tool_name and return an instance of it.
         """
         for name, obj in inspect.getmembers(module):
-            if (inspect.isclass(obj) and issubclass(obj, BaseTool) and obj != BaseTool):
-                candidate_tool = obj()
-                if candidate_tool.name == tool_name:
-                    return candidate_tool
+            if (inspect.isclass(obj) and 
+                issubclass(obj, BaseTool) and 
+                obj != BaseTool and 
+                not inspect.isabstract(obj)):  # Skip abstract classes
+                try:
+                    tool_instance = obj(provider_context=self.provider_context)
+                    if tool_instance.name == tool_name:
+                        return tool_instance
+                except Exception as e:
+                    self.console.print(f"[red]Error creating tool instance {name}:[/red] {str(e)}")
         return None
 
     def _display_token_usage(self, usage):

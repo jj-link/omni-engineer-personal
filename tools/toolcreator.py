@@ -28,7 +28,8 @@ class ToolCreatorTool(BaseTool):
         "required": ["description"]
     }
 
-    def __init__(self):
+    def __init__(self, provider_context=None):
+        super().__init__(provider_context)
         self.client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
         self.console = Console()
         self.tools_dir = Path(__file__).parent.parent / "tools"  # Fixed path
@@ -41,7 +42,7 @@ class ToolCreatorTool(BaseTool):
         """Validate tool name matches required pattern"""
         return bool(re.match(r'^[a-zA-Z0-9_-]{1,64}$', name))
 
-    def execute(self, **kwargs) -> str:
+    def _execute(self, **kwargs) -> str:
         description = kwargs.get("description")
 
         # Create exact same prompt as the original

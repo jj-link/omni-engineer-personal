@@ -26,7 +26,7 @@ class FileEditTool(BaseTool):
         "required": ["file_path", "edit_type", "new_content"]
     }
 
-    def execute(self, **kwargs) -> str:
+    def _execute(self, **kwargs) -> str:
         file_path = kwargs.get('file_path')
         edit_type = kwargs.get('edit_type')
         new_content = kwargs.get('new_content')

@@ -32,7 +32,7 @@ class BrowserTool(BaseTool):
         parsed = urlparse(url)
         return parsed.scheme in ['http', 'https']
 
-    def execute(self, **kwargs) -> str:
+    def _execute(self, **kwargs) -> str:
         urls = kwargs.get('urls', [])
         if isinstance(urls, str):
             urls = [urls]
