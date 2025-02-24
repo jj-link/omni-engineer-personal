@@ -226,30 +226,42 @@ class Assistant:
                     tool_results = []
                     for tool_call in tool_calls:
                         # Create a tool use object compatible with our _execute_tool method
+                        tool_call = {
+                            'id': str(uuid.uuid4()),  # Generate a unique ID
+                            'type': 'function',
+                            'function': {
+                                'name': tool_call['function']['name'],
+                                'parameters': tool_call['function']['parameters']
+                            }
+                        }
+                        
+                        # Create tool use object
                         tool_use = type('ToolUse', (), {
                             'name': tool_call['function']['name'],
-                            'input': json.loads(tool_call['function']['arguments'])
+                            'input': tool_call['function']['parameters']  # Use parameters directly
                         })
                         
+                        # Execute the tool
+                        self.console.print("\n[bold yellow]  Handling Tool Use...[/bold yellow]\n")
                         result = self._execute_tool(tool_use)
                         
-                        # Format tool result for CBORG
-                        tool_results.append({
+                        # Format tool result
+                        tool_result = {
                             'role': 'tool',
                             'content': str(result),
                             'tool_call_id': tool_call['id'],
                             'name': tool_call['function']['name']
+                        }
+                        
+                        # Add results to conversation history
+                        self.conversation_history.append({
+                            "role": "assistant",
+                            "content": assistant_message.get('content', '')
                         })
-                    
-                    # Add tool results to conversation history
-                    self.conversation_history.append({
-                        "role": "assistant",
-                        "content": assistant_message.get('content', '')
-                    })
-                    # Add each tool result as a separate message
-                    for tool_result in tool_results:
-                        self.conversation_history.append(tool_result)
-                    return self._get_completion()  # Recursive call to continue
+                        # Add each tool result as a separate message
+                        for tool_result in [tool_result]:
+                            self.conversation_history.append(tool_result)
+                        return self._get_completion()  # Recursive call to continue
                 
                 # If no tool usage, just return the response
                 self.conversation_history.append({
@@ -268,10 +280,18 @@ class Assistant:
                     # Prepare conversation history for Ollama
                     messages = []
                     
-                    # Add system prompt first
+                    # Extract just the function part for each tool
+                    ollama_tools = [tool['function'] for tool in self.tools]
+                    
+                    # Create dynamic tool list for system prompt
+                    tool_descriptions = "\n    Available Tools:\n"
+                    for tool in ollama_tools:
+                        tool_descriptions += f"    - {tool['name']}: {tool['description']}\n"
+                    
+                    # Add system prompt first with dynamic tool list
                     messages.append({
                         'role': 'system',
-                        'content': f"{SystemPrompts.DEFAULT}\n\n{SystemPrompts.OLLAMA_TOOL_USAGE}"
+                        'content': f"{SystemPrompts.OLLAMA_DEFAULT}\n\n{tool_descriptions}\n\nTo use a tool, format your response like this:\n\n<tool_calls>\n{{\n    \"type\": \"function\",\n    \"function\": {{\n        \"name\": \"tool_name\",\n        \"parameters\": {{\n            // parameters here\n        }}\n    }}\n}}\n</tool_calls>"
                     })
                     
                     # Add conversation history
@@ -291,6 +311,11 @@ class Assistant:
 
                     # Create Ollama client and make request
                     client = ollama.Client(host='http://localhost:11434')
+                    
+                    print("[DEBUG] Tools passed to Ollama:")
+                    for tool in ollama_tools:
+                        print(f"  - {tool['name']}: {tool['description'][:60]}...")
+                    
                     response = client.chat(
                         model=self.model,
                         messages=messages,
@@ -298,30 +323,42 @@ class Assistant:
                         options={
                             'temperature': self.temperature,
                             'top_p': 0.9,
-                            'tools': self.tools,  # Add tools configuration
+                            'tools': ollama_tools,  # Pass just the function part
                             'tool_choice': 'auto'  # Enable automatic tool choice
                         }
                     )
 
                     # Check for tool usage in the response text
                     response_content = response['message']['content']
+                    print("[DEBUG] Response content:", response_content[:200], "...")  # Show first 200 chars
                     tool_call_match = re.search(r'<tool_calls>(.*?)</tool_calls>', response_content, re.DOTALL)
                     
                     if tool_call_match:
+                        print("[DEBUG] Found tool call")
                         try:
                             # Parse the tool call JSON
-                            tool_call_json = json.loads(tool_call_match.group(1).strip())
+                            tool_call_text = tool_call_match.group(1).strip()
+                            print("[DEBUG] Tool call text:", tool_call_text)
+                            tool_call_json = json.loads(tool_call_text)
+                            
+                            # Validate tool call format
+                            if tool_call_json.get('type') != 'function' or 'function' not in tool_call_json:
+                                raise ValueError("Invalid tool call format: missing 'type' or 'function' field")
                             
                             # Create a tool call object
                             tool_call = {
                                 'id': str(uuid.uuid4()),  # Generate a unique ID
-                                'function': tool_call_json['function']
+                                'type': 'function',
+                                'function': {
+                                    'name': tool_call_json['function']['name'],
+                                    'parameters': tool_call_json['function']['parameters']
+                                }
                             }
                             
                             # Create tool use object
                             tool_use = type('ToolUse', (), {
                                 'name': tool_call['function']['name'],
-                                'input': json.loads(json.dumps(tool_call['function']['arguments']))  # Ensure proper JSON encoding
+                                'input': tool_call['function']['parameters']  # Use parameters directly
                             })
                             
                             # Execute the tool
@@ -346,10 +383,13 @@ class Assistant:
                         except json.JSONDecodeError as e:
                             logging.error(f"Failed to parse tool call JSON: {str(e)}")
                             return f"Error: Invalid tool call format - {str(e)}"
+                        except ValueError as e:
+                            logging.error(f"Invalid tool call format: {str(e)}")
+                            return f"Error: {str(e)}"
                         except Exception as e:
-                            logging.error(f"Error executing tool call: {str(e)}")
-                            return f"Error executing tool: {str(e)}"
-                    
+                            logging.error(f"Error handling tool call: {str(e)}")
+                            return f"Error handling tool call: {str(e)}"
+
                     # If no tool usage, just return the response
                     assistant_message = {
                         'role': 'assistant',
@@ -361,7 +401,7 @@ class Assistant:
                 except Exception as e:
                     logging.error(f"Ollama error: {str(e)}")
                     return f"Error: {str(e)}"
-            
+
             else:
                 raise ValueError(f"Unsupported provider: {self.provider}")
 
@@ -446,6 +486,7 @@ class Assistant:
                         self.console.print(f"[yellow]Skipping tool {module_info.name} due to missing dependency[/yellow]")
                 except Exception as mod_err:
                     self.console.print(f"[red]Error loading module {module_info.name}:[/red] {str(mod_err)}")
+
         except Exception as overall_err:
             self.console.print(f"[red]Error in tool loading process:[/red] {str(overall_err)}")
 
@@ -519,7 +560,12 @@ class Assistant:
                                         'function': {
                                             'name': tool_instance.name,
                                             'description': tool_instance.description,
-                                            'parameters': tool_instance.input_schema
+                                            'parameters': {
+                                                '$schema': 'https://json-schema.org/draft/2020-12/schema',
+                                                'type': 'object',
+                                                'properties': tool_instance.input_schema,
+                                                'required': list(tool_instance.input_schema.keys())
+                                            }
                                         }
                                     })
                                 print(f"    Successfully added tool: {tool_instance.name}")
@@ -563,7 +609,7 @@ class Assistant:
         else:
             formatted_tools = "No tools available."
         self.console.print(formatted_tools)
-        self.console.print("\n---")
+        self.console.print("---")
 
     def _display_tool_usage(self, tool_name: str, input_data: Dict, result: str):
         """

@@ -122,6 +122,15 @@ class FileCreatorTool(BaseTool):
                 binary = file_spec.get('binary', False)
                 encoding = file_spec.get('encoding', 'utf-8')
 
+                # Safety check - don't overwrite existing files
+                if path.exists():
+                    results.append({
+                        'path': str(path),
+                        'success': False,
+                        'error': f"File already exists: {path}. Use fileedittool to modify existing files."
+                    })
+                    continue
+
                 # Create parent directories
                 path.parent.mkdir(parents=True, exist_ok=True)
 

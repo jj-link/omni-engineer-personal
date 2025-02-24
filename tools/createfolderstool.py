@@ -4,25 +4,34 @@ import pathlib
 from typing import List
 
 class CreateFoldersTool(BaseTool):
-    name = "create_folder"
-    description = '''Creates a new folder at the specified absolute or relative path. Use this tool by providing a path parameter in the following format:
+    name = "createfolderstool"
+    description = '''Creates a new folder at the specified path. Use forward slashes in paths - they will be automatically converted to the correct format for your system.
     
     {
-        "path": "/absolute/path" or "relative/path"
+        "path": "test/subfolder"  # Use forward slashes - they will be converted automatically
     }
     
-    Example:
-    To create a folder named "test" in the current directory:
+    Examples:
+    1. Create a folder in current directory:
     {
         "path": "test"
     }
     
-    To create a nested folder:
+    2. Create a nested folder:
     {
-        "path": "parent/child"
+        "path": "test/subfolder/nested"  # Forward slashes will be converted automatically
     }
     
-    Note: The path can be absolute (e.g., /Users/username/Documents) or relative (e.g., myfolder).'''
+    3. Create a folder relative to current:
+    {
+        "path": "./test/folder"  # Explicit relative paths are supported
+    }
+    
+    Notes:
+    - Always use forward slashes (/) in paths
+    - Paths are relative to the project root
+    - No need to escape slashes or use backslashes
+    - Avoid absolute paths unless specifically required'''
     input_schema = {
         "type": "object",
         "properties": {
@@ -40,15 +49,14 @@ class CreateFoldersTool(BaseTool):
             return "No folder path provided"
 
         try:
-            # Normalize path
-            normalized_path = os.path.normpath(path)
-            absolute_path = os.path.abspath(normalized_path)
-            
-            # Validate path
-            if not all(c not in '<>:"|?*' for c in absolute_path):
+            # Validate path components
+            path_parts = pathlib.Path(path).parts
+            if any(any(c in '<>:"|?*' for c in part) for part in path_parts):
                 return {"response": "Error: Invalid characters in path"}
 
-            # Create directory
+            # Normalize and create directory
+            normalized_path = os.path.normpath(path)
+            absolute_path = os.path.abspath(normalized_path)
             os.makedirs(absolute_path, exist_ok=True)
             return {"response": f"Successfully created folder: {path}"}
 

@@ -1,10 +1,10 @@
 import asyncio
 from tools.base import ProviderContext
-from tools.create_folder_tool_impl import CreateFolderToolImpl
+from tools.createfolderstool import CreateFoldersTool
 from pathlib import Path
 import shutil
 
-async def test_create_folder_integration():
+async def test_createfolderstool_integration():
     # Create test directory
     test_dir = Path("integration_test_workspace")
     if test_dir.exists():
@@ -19,7 +19,7 @@ async def test_create_folder_integration():
             parameters={"temperature": 0.7}
         )
         
-        ollama_tool = CreateFolderToolImpl(provider_context=ollama_context)
+        ollama_tool = CreateFoldersTool(provider_context=ollama_context)
         result = await ollama_tool.execute(path=str(test_dir / "ollama_test"))
         print("\nOllama Integration Test:")
         print(f"Result: {result}")
@@ -32,7 +32,7 @@ async def test_create_folder_integration():
             parameters={"temperature": 0.0}
         )
         
-        cborg_tool = CreateFolderToolImpl(provider_context=cborg_context)
+        cborg_tool = CreateFoldersTool(provider_context=cborg_context)
         result = await cborg_tool.execute(path=str(test_dir / "cborg_test"))
         print("\nCBORG Integration Test:")
         print(f"Result: {result}")
@@ -72,4 +72,4 @@ async def test_create_folder_integration():
             shutil.rmtree(test_dir)
 
 if __name__ == "__main__":
-    asyncio.run(test_create_folder_integration())
+    asyncio.run(test_createfolderstool_integration())

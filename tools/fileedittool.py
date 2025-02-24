@@ -5,12 +5,35 @@ import re
 class FileEditTool(BaseTool):
     name = "fileedittool"
     description = '''
-    A tool for editing file contents with support for:
-    - Full file content replacement
-    - Partial content editing by line numbers
-    - Pattern-based text search and replace
-    - Multiple file type support
-    - Error handling for file operations
+    A tool for editing EXISTING files only. Required parameters:
+    - file_path: Path to the file to edit (must exist)
+    - edit_type: Must be exactly "full" or "partial"
+    - new_content: The new content to write
+
+    IMPORTANT: 
+    - If the file does not exist, use filecreatortool instead
+    - If parent directories don't exist, use createfolderstool first
+    - Never use example paths like "path/to/file.txt"
+
+    For full file replacement:
+    {
+        "file_path": "test_file.py",
+        "edit_type": "full",
+        "new_content": "print('Hello world')"
+    }
+
+    For partial edits, additional parameters:
+    - start_line & end_line: Edit specific lines
+    - search_pattern & replacement_text: Find and replace text
+
+    Example partial edit:
+    {
+        "file_path": "test_file.py",
+        "edit_type": "partial",
+        "new_content": "def main():",
+        "start_line": 1,
+        "end_line": 1
+    }
     '''
     input_schema = {
         "type": "object",

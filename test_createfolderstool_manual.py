@@ -1,6 +1,6 @@
 import asyncio
 from tools.base import ProviderContext
-from tools.create_folder_tool_impl import CreateFolderToolImpl
+from tools.createfolderstool import CreateFoldersTool
 from pathlib import Path
 import shutil
 import json
@@ -24,7 +24,7 @@ def verify_cborg_response(result):
     print("\nCBORG Response Format:")
     print(json.dumps(result, indent=2))
 
-async def test_create_folder():
+async def test_createfolderstool():
     # Create test directory
     test_dir = Path("manual_test_workspace")
     if test_dir.exists():
@@ -38,7 +38,7 @@ async def test_create_folder():
             model="codellama",
             parameters={"temperature": 0.7}
         )
-        ollama_tool = CreateFolderToolImpl(provider_context=ollama_context)
+        ollama_tool = CreateFoldersTool(provider_context=ollama_context)
         
         print("\n=== Testing Ollama Provider ===")
         
@@ -59,7 +59,7 @@ async def test_create_folder():
             model="lbl/cborg-coder:chat",
             parameters={"temperature": 0.0}
         )
-        cborg_tool = CreateFolderToolImpl(provider_context=cborg_context)
+        cborg_tool = CreateFoldersTool(provider_context=cborg_context)
         
         print("\n=== Testing CBORG Provider ===")
         
@@ -87,4 +87,4 @@ async def test_create_folder():
             shutil.rmtree(test_dir)
 
 if __name__ == "__main__":
-    asyncio.run(test_create_folder())
+    asyncio.run(test_createfolderstool())

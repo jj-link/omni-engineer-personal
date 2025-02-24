@@ -63,9 +63,13 @@ class BaseTool(ABC):
 
     def execute(self, **kwargs) -> Dict[str, Any]:
         """Execute the tool with the given arguments"""
+        import logging
+        logging.debug(f"[{self.name}] Executing with parameters: {kwargs}")
         try:
             self.validate_input(**kwargs)
+            logging.debug(f"[{self.name}] Input validation passed")
             result = self._execute(**kwargs)
+            logging.debug(f"[{self.name}] Execution result: {result}")
             
             # Handle string responses
             if isinstance(result, str):
@@ -77,7 +81,7 @@ class BaseTool(ABC):
             
             # Format response based on provider
             if self.provider_context and self.provider_context.provider_type == "cborg":
-                return {
+                formatted_result = {
                     "choices": [{
                         "message": {
                             "role": "assistant",
@@ -87,16 +91,19 @@ class BaseTool(ABC):
                     }]
                 }
             else:  # Ollama format
-                return {
+                formatted_result = {
                     "response": result["response"],
                     "tool_call_id": kwargs.get("tool_call_id", ""),
                     "name": self.name
                 }
+            logging.debug(f"[{self.name}] Formatted result: {formatted_result}")
+            return formatted_result
                 
         except Exception as e:
             error_msg = f"Tool execution failed: {str(e)}"
+            logging.error(f"[{self.name}] {error_msg}")
             if self.provider_context and self.provider_context.provider_type == "cborg":
-                return {
+                error_result = {
                     "choices": [{
                         "message": {
                             "role": "assistant",
@@ -107,12 +114,14 @@ class BaseTool(ABC):
                     }]
                 }
             else:  # Ollama format
-                return {
+                error_result = {
                     "response": error_msg,
                     "tool_call_id": kwargs.get("tool_call_id", ""),
                     "name": self.name,
                     "error": True
                 }
+            logging.debug(f"[{self.name}] Error result: {error_result}")
+            return error_result
 
     @abstractmethod
     def _execute(self, **kwargs) -> Dict[str, Any]:

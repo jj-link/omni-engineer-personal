@@ -117,7 +117,10 @@ class FileContentReaderTool(BaseTool):
         return results
 
     def _execute(self, **kwargs) -> str:
+        import logging
+        logging.debug(f"[FileContentReaderTool] Raw kwargs: {kwargs}")
         file_paths = kwargs.get('file_paths', [])
+        logging.debug(f"[FileContentReaderTool] Extracted file_paths: {file_paths}")
         results = {}
 
         try:
@@ -134,4 +137,5 @@ class FileContentReaderTool(BaseTool):
             return json.dumps(results, indent=2)
 
         except Exception as e:
+            logging.error(f"[FileContentReaderTool] Error in _execute: {e}")
             return json.dumps({"error": str(e)}, indent=2)

@@ -18,7 +18,8 @@ import aiohttp
 from prompt_toolkit import PromptSession
 from prompt_toolkit.styles import Style
 import argparse
-from tools.create_folder_tool_impl import CreateFolderToolImpl
+from tools.base import ProviderContext
+from tools.createfolderstool import CreateFoldersTool
 
 # Provider configuration
 PROVIDER_CONFIG = {
@@ -119,7 +120,7 @@ You are Ollama Engineer, an AI assistant powered Ollama models, specialized in s
 
 Available tools and their optimal use cases:
 
-1. create_folder: Create new directories in the project structure.
+1. createfolderstool: Create new directories using forward slashes in paths (e.g., "test/subfolder"). Paths will be automatically converted to the correct format for your system.
 2. create_file: Generate new files with specified content. Strive to make the file as complete and useful as possible.
 3. edit_and_apply: Examine and modify existing files by instructing a separate AI coding agent. You are responsible for providing clear, detailed instructions to this agent. When using this tool:
    - Provide comprehensive context about the project, including recent changes, new variables or functions, and how files are interconnected.
@@ -223,7 +224,7 @@ def update_system_prompt(current_iteration: Optional[int] = None, max_iterations
     else:
         return BASE_SYSTEM_PROMPT + file_contents_prompt + "\n\n" + chain_of_thought_prompt
 
-def create_folder(path):
+def createfolderstool(path):
     try:
         os.makedirs(path, exist_ok=True)
         return f"Folder created: {path}"
@@ -550,8 +551,8 @@ def tavily_search(query):
 
 # Tools registry with provider support
 tools_registry = {
-    "create_folder": {
-        "class": CreateFolderToolImpl,
+    "createfolderstool": {
+        "class": CreateFoldersTool,
         "supported_providers": ["ollama", "cborg"]
     },
     "create_file": {

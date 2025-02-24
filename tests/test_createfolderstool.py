@@ -2,16 +2,16 @@ import unittest
 import asyncio
 import tempfile
 from pathlib import Path
-from tools.create_folder_tool_impl import CreateFolderToolImpl
 from tools.base import ProviderContext
+from tools.createfolderstool import CreateFoldersTool
 import shutil
 
-class TestCreateFolderTool(unittest.TestCase):
+class TestCreateFoldersTool(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
-        self.tool = CreateFolderToolImpl()
         self.test_dir = Path(tempfile.mkdtemp())
+        self.tool = CreateFoldersTool()
 
     def tearDown(self):
         self.loop.close()
@@ -20,7 +20,7 @@ class TestCreateFolderTool(unittest.TestCase):
 
     def test_tool_properties(self):
         """Test tool name, description and schema"""
-        self.assertEqual(self.tool.name, "create_folder")
+        self.assertEqual(self.tool.name, "createfolderstool")
         self.assertIsInstance(self.tool.description, str)
         self.assertIsInstance(self.tool.input_schema, dict)
         self.assertIn("path", self.tool.input_schema["properties"])
@@ -57,7 +57,7 @@ class TestCreateFolderTool(unittest.TestCase):
             self.assertEqual(result["response"], f"Folder already exists: {test_path}")
         self.loop.run_until_complete(run_test())
 
-    def test_create_folder_with_invalid_path(self):
+    def test_createfolderstool_with_invalid_path(self):
         """Test creating a folder with invalid characters in path"""
         async def run_test():
             test_path = self.test_dir / "invalid<>path"
@@ -67,7 +67,7 @@ class TestCreateFolderTool(unittest.TestCase):
             self.assertFalse(test_path.exists())
         self.loop.run_until_complete(run_test())
 
-    def test_create_folder_with_file_path(self):
+    def test_createfolderstool_with_file_path(self):
         """Test creating a folder where a file already exists"""
         async def run_test():
             test_path = self.test_dir / "existing_file"
@@ -77,6 +77,29 @@ class TestCreateFolderTool(unittest.TestCase):
             self.assertTrue("Error" in result["response"])
             self.assertTrue(test_path.exists())
             self.assertTrue(test_path.is_file())
+        self.loop.run_until_complete(run_test())
+
+    def test_forward_slash_paths(self):
+        """Test creating folders with forward slash paths"""
+        async def run_test():
+            # Test simple nested path
+            test_path = self.test_dir / "test/subfolder"
+            result = await self.tool.execute(path=str(test_path))
+            self.assertEqual(result["response"], f"Successfully created folder: {test_path}")
+            self.assertTrue((self.test_dir / "test" / "subfolder").exists())
+
+            # Test multiple levels
+            test_path = self.test_dir / "a/b/c/d"
+            result = await self.tool.execute(path=str(test_path))
+            self.assertEqual(result["response"], f"Successfully created folder: {test_path}")
+            self.assertTrue((self.test_dir / "a" / "b" / "c" / "d").exists())
+
+            # Test with ./ prefix
+            test_path = self.test_dir / "./test2/folder"
+            result = await self.tool.execute(path=str(test_path))
+            self.assertEqual(result["response"], f"Successfully created folder: {test_path}")
+            self.assertTrue((self.test_dir / "test2" / "folder").exists())
+
         self.loop.run_until_complete(run_test())
 
     def test_provider_specific_response_format(self):
